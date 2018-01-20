@@ -113,7 +113,7 @@ class Socket_Controller(Threading_System.Thread_Controller):
             Target_Queue.put((Command,Arguments))
 
 
-class Socket_Interface:
+class Basic_Socket_Interface:
     def __init__(self,Max_Connections = 15):
         self._SC_Out_Queue = queue.Queue()
         self._Command_Queue = Threading_System.Create_Controller()
@@ -129,7 +129,86 @@ class Socket_Interface:
         self._Command_Queue.put(("SC","Controller","GetAddresses",()))
 
     def Send(self,Address,Payload):
-        self._Command_Queue.put(("SC",Address+("S",),"Send","PAYLOADS"))
+        self._Command_Queue.put(("SC",Address+("S",),"Send",Payload))
+
+    def SC_Reset(self):
+        self._Command_Queue.put(("SC","Controller","Reset",()))
+
+    def SC_Exit(self):
+        self._Command_Queue.put(("Exit",()))
+
+    def Get_Item(self):
+        self._SC_Out_Queue.get()
+
+    def Get_Output_Queue(self):
+        return self._SC_Out_Queue
+
+class Socket_Interface(Basic_Socket_Interface):
+    def Ping(self,Address,Time):  #Used to ping a node
+        Ping_Message = {"Command":"Ping",
+                   "Payload":{"Time_Sent":Time}}
+        self.Send(Address,Ping_Message)
+
+    def Ping_Response(self,Address,Time_Sent,Time):  #Pong the node back
+        Ping_Response_Message = {"Command":"Ping_Response",
+                                 "Payload":{"Time_Sent":Time_Sent,
+                                            "Remote_Time_Sent":Time}}
+        self.Send(Address,Ping_Response_Message)
+        
+
+    def Time_Sync(self,Address):    #Get a time sync from a node
+        Time_Sync_Message = {"Command":"Time_Sync",
+                             "Payload":{}}
+        self.Send(Address,Time_Sync_Message)
+
+    def Time_Sync_Response(self,Address,Time):   #respond to a time sync request
+        Time_Sync_Response_Message = {"Command":"Time_Sync_Response",
+                                      "Payload":{"Time":Time}}
+        self.Send(Address,Time_Sync_Response_Message)
+
+    def Alert(self,Address,Username,Message,Signature,Level,Current_Level):   #Alert the entire network using the message
+        Alert_Message = {"Command":"Alert",
+                         "Payload":{"Username":Username,
+                                    "Message":Message,
+                                    "Signature":Signature,
+                                    "Level":Level,
+                                    "Current_Level":Current_Level}}
+        self.Send(Address,Alert_Message)
+
+    def Get_Node_Info(self,Address):    #Get information about a node.
+        Get_Node_Info_Message = {"Command":"Get_Node_Info",
+                             "Payload":{}}
+        self.Send(Address,Get_Node_Info_Message)
+
+    def Node_Info(self,Address,Version,Type,Flags):    #Returns the Node Info request
+        Node_Info_Message = {"Command":"Node_Info",
+                             "Payload":{"Version":Version,
+                                        "Type":Type,
+                                        "Flags":Flags}}
+        self.Send(Address,Node_Info_Message)
+
+    def Get_Address(self,Address):   # Get the address of ones own node
+        Get_Address_Message = {"Command":"Get_Address",
+                               "Payload":{}}
+        self.Send(Address,Get_Address_Message)
+
+    def Get_Address_Response(self,Address):
+        Get_Address_Response_Message = {"Command":"Get_Address_Response",
+                               "Payload":{"Address":Address}}
+        self.Send(Address,Get_Address_Response_Message)
+        
+        
+        
+        
+        
+        
+
+        
+        
+                                 
+                                 
+
+
 
     
 
