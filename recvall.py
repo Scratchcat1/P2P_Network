@@ -14,7 +14,7 @@
 import struct,codecs
 
 def Send(con,message):
-    message = codecs.encode(str(message))
+    message = codecs.encode(json.dumps(message))
     con.send(struct.pack("i",len(message))+message)
 
 def Recv(con):
@@ -25,5 +25,6 @@ def Recv(con):
         if not msg:
             raise Exception("Socket read error. Remote connection most likely terminated.")
         data += msg
-    return codecs.decode(data)
+    return json.loads(codecs.decode(data).replace("'","\""))
+
             

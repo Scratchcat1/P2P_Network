@@ -1,5 +1,4 @@
-import socket,Threading_System,queue,Connection_System,time,codecs,recvall
-import json
+import socket,Threading_System,queue,Connection_System,time,recvall
 #Address is a tuple of ("IP",Port)
 #Each "connection" has two socket pairs, Send and Recv, Send is the one the client formed, Recv is the one the client accepted.
 
@@ -81,7 +80,7 @@ class Socket_Controller(Threading_System.Thread_Controller):
                 
 
     def Process_Socket_Queues(self):  #Checks all the thread return queues , processing them and returning the data where needed.
-        for Base_Address in self._Addresses:
+        for Base_Address in list(self._Addresses): # List to prevent changing size error if a node disconnects
             for letter in ["S","R"]:          #Iterates through each copy of items.
                 Address = Base_Address + (letter,)       # Forms the (IP,Port,Mode)
                 while not self._Return_Queues[Address].empty():
@@ -150,6 +149,9 @@ class Basic_Socket_Interface:
 
     def SC_Exit(self):
         self._Command_Queue.put(("Exit",()))
+
+    def Output_Queue_Empty(self):
+        return self._SC_Out_Queue.empty()
 
     def Get_Item(self):
         return self._SC_Out_Queue.get()
@@ -229,13 +231,19 @@ class Socket_Interface(Basic_Socket_Interface):
 
 
 class Network_Node:
-    def __init__(self,Address,Type = "",Flags = [],Last_Contact = time.time(),Last_Ping = 100,Remote_Time = time.time()):
+    def __init__(self,Address,Version = -1,Type = "",Flags = [],Last_Contact = time.time(),Last_Ping = 100,Remote_Time = time.time()):
         self._Address = Address
+        self._Version = Version
         self._Type = Type
         self._Flags = Flags
         self._Last_Contact = Last_Contact
         self._Last_Ping = Last_Ping
         self._Remote_Time = Remote_Time
+
+    def Get_Version(self):
+        return self._Version
+    def Set_Version(self,Version):
+        self._Version = Version
 
     def Get_Address(self):
         return self._Address
@@ -310,7 +318,6 @@ def Recv_Thread(Thread_Name,Command_Queue,addr,Connection,Return_Queue):
     while not Exit:
         try:
             obtained_data = recvall.Recv(Connection)
-            obtained_data = json.loads(obtained_data.replace("'","\""))
             obtained_data["Address"] = addr
             Return_Queue.put(("Message",obtained_data))
 
