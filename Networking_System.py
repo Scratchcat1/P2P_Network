@@ -1,4 +1,5 @@
 import socket,Threading_System,queue,Connection_System,time,codecs,recvall
+import json
 #Address is a tuple of ("IP",Port)
 #Each "connection" has two socket pairs, Send and Recv, Send is the one the client formed, Recv is the one the client accepted.
 
@@ -76,7 +77,7 @@ class Socket_Controller(Threading_System.Thread_Controller):
                 O_Return_Queue,I_Return_Queue = self.Add_Return_Queue(addr,"S"),self.Add_Return_Queue(addr,"R")
                 self.Create_Thread(addr+("S",),TargetCommand = Send_Thread,TargetArgs = (addr,Outgoing_Con,O_Return_Queue))
                 self.Create_Thread(addr+("R",),TargetCommand = Recv_Thread,TargetArgs = (addr,Incoming_Con,I_Return_Queue))
-
+                self.Return_New_Connection(addr)
                 
 
     def Process_Socket_Queues(self):  #Checks all the thread return queues , processing them and returning the data where needed.
@@ -86,15 +87,18 @@ class Socket_Controller(Threading_System.Thread_Controller):
                 while not self._Return_Queues[Address].empty():
                     data = self._Return_Queues[Address].get()
                     Message,Data = data
-                    if Message == "Error":
+                    if Message == "Error":   
                         self.Kill_Connection(Base_Address)
+                        self.Return_Connection_Failure(Base_Address)
                     else:
                         self._Output_Queue.put(Data)
                 
-
+    
 
     def Get_Addresses(self):
-        self._Output_Queue.put(self._Addresses)
+        self._Output_Queue.put({"Command":"SC_Addresses",
+                                "Address":"SC",
+                                "Payload":{"Addresses":self._Addresses}})
             
 
     def Kill_Connection(self,Address):
@@ -112,12 +116,22 @@ class Socket_Controller(Threading_System.Thread_Controller):
             Target_Queue = self._Threads[Target].Get_Queue()
             Target_Queue.put((Command,Arguments))
 
+    def Return_New_Connection(self,Address):  #Inform that peer has connected
+        self._Output_Queue.put({"Command":"Peer_Connected",
+                                "Address":"SC",
+                                 "Payload":{"Address":Address}})
+
+    def Return_Connection_Failure(self,Address):   #Inform that peer has disconnected
+        self._Output_Queue.put({"Command":"Peer_Disconnected",
+                                "Address":"SC",
+                                 "Payload":{"Address":Address}})
+
 
 class Basic_Socket_Interface:
     def __init__(self,Max_Connections = 15):
         self._SC_Out_Queue = queue.Queue()
         self._Command_Queue = Threading_System.Create_Controller()
-        self._Command_Queue.put(("Controller","Create_Thread",("SC",Create_Socket_Controller,(self._SC_Out_Queue,))))
+        self._Command_Queue.put(("Controller","Create_Thread",("SC",Create_Socket_Controller,(self._SC_Out_Queue,Max_Connections))))
 
     def Kill_Connection(self,Address):
         self._Command_Queue.put(("SC","Controller","Kill_Connection",(Address,)))
@@ -138,7 +152,7 @@ class Basic_Socket_Interface:
         self._Command_Queue.put(("Exit",()))
 
     def Get_Item(self):
-        self._SC_Out_Queue.get()
+        return self._SC_Out_Queue.get()
 
     def Get_Output_Queue(self):
         return self._SC_Out_Queue
@@ -146,7 +160,7 @@ class Basic_Socket_Interface:
 class Socket_Interface(Basic_Socket_Interface):
     def Ping(self,Address,Time):  #Used to ping a node
         Ping_Message = {"Command":"Ping",
-                   "Payload":{"Time_Sent":Time}}
+                       "Payload":{"Time_Sent":Time}}
         self.Send(Address,Ping_Message)
 
     def Ping_Response(self,Address,Time_Sent,Time):  #Pong the node back
@@ -165,6 +179,7 @@ class Socket_Interface(Basic_Socket_Interface):
         Time_Sync_Response_Message = {"Command":"Time_Sync_Response",
                                       "Payload":{"Time":Time}}
         self.Send(Address,Time_Sync_Response_Message)
+        
 
     def Alert(self,Address,Username,Message,Signature,Level,Current_Level):   #Alert the entire network using the message
         Alert_Message = {"Command":"Alert",
@@ -174,6 +189,7 @@ class Socket_Interface(Basic_Socket_Interface):
                                     "Level":Level,
                                     "Current_Level":Current_Level}}
         self.Send(Address,Alert_Message)
+        
 
     def Get_Node_Info(self,Address):    #Get information about a node.
         Get_Node_Info_Message = {"Command":"Get_Node_Info",
@@ -187,6 +203,7 @@ class Socket_Interface(Basic_Socket_Interface):
                                         "Flags":Flags}}
         self.Send(Address,Node_Info_Message)
 
+
     def Get_Address(self,Address):   # Get the address of ones own node
         Get_Address_Message = {"Command":"Get_Address",
                                "Payload":{}}
@@ -196,6 +213,61 @@ class Socket_Interface(Basic_Socket_Interface):
         Get_Address_Response_Message = {"Command":"Get_Address_Response",
                                "Payload":{"Address":Address}}
         self.Send(Address,Get_Address_Response_Message)
+
+
+    def Get_Peers(self,Address):
+        Get_Peers_Message = {"Command":"Get_Peers",
+                             "Payload":{}}
+        self.Send(Address,Get_Peers_Message)
+
+    def Get_Peers_Response(self,Address,Peers):  #Peers is list containing addresses of peers
+        Get_Peers_Response_Message = {"Command":"Get_Peers",
+                                      "Payload":{"Peers":Peers}}
+        self.Send(Address,Get_Peers_Response_Message)
+
+
+
+
+class Network_Node:
+    def __init__(self,Address,Type = "",Flags = [],Last_Contact = time.time(),Last_Ping = 100,Remote_Time = time.time()):
+        self._Address = Address
+        self._Type = Type
+        self._Flags = Flags
+        self._Last_Contact = Last_Contact
+        self._Last_Ping = Last_Ping
+        self._Remote_Time = Remote_Time
+
+    def Get_Address(self):
+        return self._Address
+    def Set_Address(self,Address):
+        self._Address = Address
+
+    def Get_Type(self):
+        return self._Type
+    def Set_Type(self,Type):
+        self._Type = Type
+
+    def Get_Flags(self):
+        return self._Flags
+    def Set_Flags(self,Flags):
+        self._Flags = Flags
+
+    def Get_Last_Contact(self):
+        return self._Last_Contact
+    def Set_Last_Contact(self,Time):
+        self._Last_Contact = Time
+
+    def Get_Last_Ping(self):
+        return self._Last_Ping
+    def Set_Last_Ping(self,Ping):
+        self._Last_Ping = Ping
+
+    def Get_Remote_Time(self):
+        return self._Remote_Time
+    def Set_Remote_Time(self,Time):
+        self._Remote_Time = Time
+
+    
         
         
         
@@ -219,9 +291,9 @@ def Send_Thread(Thread_Name,Command_Queue,addr,Connection,Return_Queue):
         try:
             data = Command_Queue.get()
             Command,Data = data
-            print("IS THIS OK TO SEND DATA",Data)
+            print("IS THIS OK TO SEND DATA : ",Data)
             if Command == "Send":
-                Connection.sendall(codecs.encode(str(Data)))
+                recvall.Send(Connection,Data)
             elif Command == "Exit":
                 Exit = True
                 Connection.close()
@@ -237,8 +309,12 @@ def Recv_Thread(Thread_Name,Command_Queue,addr,Connection,Return_Queue):
     Exit = False
     while not Exit:
         try:
-            obtained_data = codecs.decode(recvall.recvall(Connection))
+            obtained_data = recvall.Recv(Connection)
+            obtained_data = json.loads(obtained_data.replace("'","\""))
+            obtained_data["Address"] = addr
             Return_Queue.put(("Message",obtained_data))
+
+            
             if not Command_Queue.empty():
                 data = Command_Queue.get()
                 Command,Data = data
