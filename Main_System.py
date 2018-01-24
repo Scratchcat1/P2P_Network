@@ -47,7 +47,9 @@ class Main_Handler:
                 "Exit":self.On_Exit,
                 "Exit_Response":self.On_Exit_Response,
                 "Get_Peers":self.On_Get_Peers,
-                "Get_Peers_Response":self.On_Get_Peers_Response,                
+                "Get_Peers_Response":self.On_Get_Peers_Response,
+                "Get_Address":self.On_Get_Address,
+                "Get_Address_Response":self.On_Get_Address_Response,
                     }
 
             if message["Command"] in Commands:
@@ -70,7 +72,46 @@ class Main_Handler:
     def On_Get_Node_Info(self,Message):
         self._SI.Node_Info(Message["Address"],self._Node_Info.Get_Version(),self._Node_Info.Get_Type(),self._Node_Info.Get_Flags())
     def On_Node_Info(self,Message):
-        Node = 
+        Node = self._Network_Nodes[Message["Address"]]
+        Node.Set_Version(Message["Payload"]["Version"])
+        Node.Set_Type(Message["Payload"]["Type"])
+        Node.Set_Flags(Message["Payload"]["Flags"])
+
+    def On_Time_Sync(self,Message):
+        self._SI.Time_Sync_Response(Message["Address"],self._Time.time())
+    def On_Time_Sync_Response(self,Message):
+        Node = self._Network_Nodes[Message["Address"]]
+        Node.Set_Remote_Time(Message["Payload"]["Time"])
+
+    def On_Alert(self,Message):
+        print("ADD THIS IN. Verification, adjustment etc.")
+
+    def On_Exit(self,Message):
+        self._SI.Exit_Response(Message["Address"])
+        self._SI.Kill_Connection(Message["Address"])
+    def On_Exit_Response(self,Message):
+        self._SI.Kill_Connection(Message["Address"])
+
+    def On_Get_Peers(self,Message):
+        Peers = []
+        for Node in self._Network_Nodes:
+            Peers.append(Node.Get_Address())
+        self._SI.Get_Peers_Response(Message["Address"],Peers)
+    def On_Get_Peers_Response(self,Message):
+        print("Add this in. Store it in database or something")
+
+    def On_Get_Address(self,Message):
+        self._SI.Get_Address_Response(Message["Address"])
+    def On_Get_Address_Response(self,Message):
+        self._Node_Info.Set_Address(Message["Payload"]["Address"])
+
+    
+        
+        
+        
+        
+        
+        
         
 
 

@@ -172,6 +172,19 @@ class Socket_Interface(Basic_Socket_Interface):
         self.Send(Address,Ping_Response_Message)
         
 
+    def Get_Node_Info(self,Address):    #Get information about a node.
+        Get_Node_Info_Message = {"Command":"Get_Node_Info",
+                             "Payload":{}}
+        self.Send(Address,Get_Node_Info_Message)
+
+    def Node_Info(self,Address,Version,Type,Flags):    #Returns the Node Info request
+        Node_Info_Message = {"Command":"Node_Info",
+                             "Payload":{"Version":Version,
+                                        "Type":Type,
+                                        "Flags":Flags}}
+        self.Send(Address,Node_Info_Message)
+        
+
     def Time_Sync(self,Address):    #Get a time sync from a node
         Time_Sync_Message = {"Command":"Time_Sync",
                              "Payload":{}}
@@ -191,19 +204,27 @@ class Socket_Interface(Basic_Socket_Interface):
                                     "Level":Level,
                                     "Current_Level":Current_Level}}
         self.Send(Address,Alert_Message)
+
+    def Exit(self,Address):
+        Exit_Message = {"Command":"Exit",
+                        "Payload":{}}
+        self.Send(Address,Exit_Message)
+
+    def Exit_Response(self,Address):
+        Exit_Response_Message = {"Command":"Exit_Response",
+                                 "Payload":{}}
+        self.Send(Address,Exit_Response_Message)
         
 
-    def Get_Node_Info(self,Address):    #Get information about a node.
-        Get_Node_Info_Message = {"Command":"Get_Node_Info",
+    def Get_Peers(self,Address):
+        Get_Peers_Message = {"Command":"Get_Peers",
                              "Payload":{}}
-        self.Send(Address,Get_Node_Info_Message)
+        self.Send(Address,Get_Peers_Message)
 
-    def Node_Info(self,Address,Version,Type,Flags):    #Returns the Node Info request
-        Node_Info_Message = {"Command":"Node_Info",
-                             "Payload":{"Version":Version,
-                                        "Type":Type,
-                                        "Flags":Flags}}
-        self.Send(Address,Node_Info_Message)
+    def Get_Peers_Response(self,Address,Peers):  #Peers is list containing addresses of peers
+        Get_Peers_Response_Message = {"Command":"Get_Peers",
+                                      "Payload":{"Peers":Peers}}
+        self.Send(Address,Get_Peers_Response_Message)
 
 
     def Get_Address(self,Address):   # Get the address of ones own node
@@ -215,17 +236,6 @@ class Socket_Interface(Basic_Socket_Interface):
         Get_Address_Response_Message = {"Command":"Get_Address_Response",
                                "Payload":{"Address":Address}}
         self.Send(Address,Get_Address_Response_Message)
-
-
-    def Get_Peers(self,Address):
-        Get_Peers_Message = {"Command":"Get_Peers",
-                             "Payload":{}}
-        self.Send(Address,Get_Peers_Message)
-
-    def Get_Peers_Response(self,Address,Peers):  #Peers is list containing addresses of peers
-        Get_Peers_Response_Message = {"Command":"Get_Peers",
-                                      "Payload":{"Peers":Peers}}
-        self.Send(Address,Get_Peers_Response_Message)
 
 
 

@@ -33,6 +33,8 @@ class DBConnection:
     def Get_Peers(self,Limit = 15):
         self._cur.execute("SELECT * FROM Peers Limit = %s",(Limit,))
         return self._cur.fetchall()
+
+    ###### Alert_Users #######
         
 
 
@@ -59,7 +61,7 @@ class DBConnection:
         self._cur.execute("CREATE TABLE Leaf_Blocks(Block_Hash TEXT PRIMARY KEY, Block_Number INT, Sum_Work INT)")
         self._cur.execute("CREATE TABLE UTXO(Transaction_Hash TEXT PRIMARY KEY, Index INT, Output INT, Block_Hash TEXT)")
         self._cur.execute("CREATE TABLE Peers(IP TEXT ,Port INT, Type TEXT, Flags TEXT, Last_Contact INT, Last_Ping INT, PRIMARY KEY(IP,Port))")
-        
+        self._cur.execute("CREATE TABLE Alert_Users(Username TEXT PRIMARY KEY, Public_Key TEXT, Max_Level INT)")
         
         self._cur.execute("SET FOREIGN_KEY_CHECKS = 1")  # Reenables checks
         self._db_con.commit()
