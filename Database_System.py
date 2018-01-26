@@ -34,10 +34,21 @@ class DBConnection:
         self._cur.execute("SELECT * FROM Peers Limit = %s",(Limit,))
         return self._cur.fetchall()
 
+    def Remove_Peer(self,IP,Port):
+        self._cur.execute("DELETE FROM Peers WHERE IP = %s AND Port = %s",(IP,Port))
+                
+
     ###### Alert_Users #######
-        
 
+    def Add_Alert_User(self,Username,Public_Key,Max_Level):
+        self._cur.execute("INSERT INTO Alert_Users VALUES(%s,%s,%s)",(Username,Public_Key,Max_Level))
 
+    def Remove_Alert_User(self,Username):
+        self._cur.execute("DELETE FROM Alert_Users WHERE = %s",(Username,))
+
+    def Get_Alert_User(self,Username):
+        self._cur.execute("SELECT * FROM Alert_Users WHERE = %s",(Username,))
+        return self._cur.fetchall()
 
 
 

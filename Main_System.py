@@ -4,13 +4,37 @@ class Time_Keeper:
     def __init__(self):
         self._Offset = 0
     def adjust(self,Desired_Time):
-        self._Offset = Desired_Time-time.time()  #Rearranged Offset + time.time = desired_time
+        self._Offset = Val_Limit(Desired_Time-time.time(),3600,-3600)  #Rearranged Offset + time.time = desired_time, offset max 1 hour
     def time(self):
         return time.time()+self._Offset
     def reset(self):
         self._Offset = 0
     def get_offset(self):
         return self._Offset
+
+class Ticker:
+    def __init__(self, Time_Period):
+        self._Time_Period
+        self._Last_Call = 0
+    def is_go(self):
+        if time.time() >= self._Time_Period+self._Last_Call:
+            return True
+        else:
+            return False
+    def wait(self):
+        dtime = self._Last_Call+self._Time_Period - time.time()
+        if dtime > 0:
+            time.sleep(dtime)
+        self._Last_Call = time.time()
+    def reset(self):
+        self._Last_Call = time.time()
+    def zero(self):
+        self._Last_Call = 0
+    
+        
+
+def Val_Limit(Value,Max,Min):  #https://stackoverflow.com/questions/5996881/how-to-limit-a-number-to-be-within-a-specified-range-python
+    return max(min(Value,Min),Max)
 
     
 class Main_Handler:
@@ -22,6 +46,8 @@ class Main_Handler:
         self._SI = Networking_System.Socket_Interface(Max_Connections)
         self._Network_Nodes = {}  #Address :Network_Node
         self._Time = Time_Keeper()
+
+        self._Network_Nodes_Check_Timer = Timer(300)  #Every 300 seconds check nodes
         print("Main_Handler started.")
 
     def Main_Loop(self):
@@ -54,6 +80,9 @@ class Main_Handler:
 
             if message["Command"] in Commands:
                 Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
+            if message["Address"] in self._Network_Nodes:
+                self._Network_Nodes[message["Address"]].Set_Last_Contact(self._Time.time())  #Mark as last contact
+                
                 
 
 
@@ -106,7 +135,27 @@ class Main_Handler:
         self._Node_Info.Set_Address(Message["Payload"]["Address"])
 
     
-        
+
+
+
+
+    def Spawn_Events(self):
+        pass
+
+    def Check_Network_Nodes(self):
+        if self._Network_Nodes_Check_Timer.is_go():
+            print("Checking nodes")
+            self._Network_Nodes_Check_Timer.reset()
+            if len(self._Network_Nodes) < 15:
+                difference = 15-self._Network_Nodes
+                
+            for Node in self._Network_Nodes.values():
+                if Node.Get_Last_Contact() > 20*60:
+                    self._SI.Ping(Node.Get_Address(),self._Time.time())  #Ping to keep connection alive
+                if Node.Get_Last_Contact() > 90*60:
+                    self._SI.Kill_Connection(Node.Get_Address())
+                    
+                
         
         
         
