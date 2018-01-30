@@ -196,13 +196,12 @@ class Socket_Interface(Basic_Socket_Interface):
         self.Send(Address,Time_Sync_Response_Message)
         
 
-    def Alert(self,Address,Username,Message,TimeStamp,Signature,Level,Current_Level):   #Alert the entire network using the message
+    def Alert(self,Address,Username,Message,TimeStamp,Signature,Current_Level):   #Alert the entire network using the message
         Alert_Message = {"Command":"Alert",
                          "Payload":{"Username":Username,
                                     "Message":Message,
                                     "TimeStamp":TimeStamp,
                                     "Signature":Signature,
-                                    "Level":Level,
                                     "Current_Level":Current_Level}}
         self.Send(Address,Alert_Message)
 

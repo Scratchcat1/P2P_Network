@@ -1,4 +1,4 @@
-import Networking_System,time
+import Networking_System,time,Database_System,Alert_System
 
 class Time_Keeper:
     def __init__(self):
@@ -40,6 +40,7 @@ def Val_Limit(Value,Max,Min):  #https://stackoverflow.com/questions/5996881/how-
 class Main_Handler:
     def __init__(self,Node_Info,Max_Connections = 15,Max_SC_Messages = 100):
         print("Starting Main_Handler...")
+        self._DB = Database_System.DBConnection()
         self._Node_Info = Node_Info
         self._Max_SC_Messages = Max_SC_Messages
         self._Max_Connections = Max_Connections
@@ -113,7 +114,11 @@ class Main_Handler:
         Node.Set_Remote_Time(Message["Payload"]["Time"])
 
     def On_Alert(self,Message):
-        print("ADD THIS IN. Verification, adjustment etc.")
+        if Alert_System.Alert_User_Verify(self._Time.time(),Message["Payload"]["Username"],Message["Payload"]["Message"],Message["Payload"]["TimeStamp"],Message["Payload"]["Signature"],Message["Payload"]["Level"]):
+            for Address in self._Nodes:
+                self._SI.Alert(Message["Payload"]["Username"],Message["Payload"]["Message"],Message["Payload"]["TimeStamp"],Message["Payload"]["Signature"],Message["Payload"]["Level"]-1)
+        else:
+            print("Invalid alert denied progress")
 
     def On_Exit(self,Message):
         self._SI.Exit_Response(Message["Address"])
@@ -127,7 +132,9 @@ class Main_Handler:
             Peers.append(Node.Get_Address())
         self._SI.Get_Peers_Response(Message["Address"],Peers)
     def On_Get_Peers_Response(self,Message):
-        print("Add this in. Store it in database or something")
+        for peer in Message["Payload"]["Peers"]:
+            self._DB.Add_Peer(peer["IP"],peer["Port"],"",[],self._Time.time(),1,Update_If_Need = False)#Transfer peer without trust in type , flags etc
+            
 
     def On_Get_Address(self,Message):
         self._SI.Get_Address_Response(Message["Address"])
