@@ -30,7 +30,7 @@ class Script_Processor:
 
     def process(self,Script):
         try:
-            Script_List = Script.split("     ")
+            Script_List = Script.split("  ")
             self._stack = Stack()
             while len(Script_List) > 0:
                 item = Script_List.pop(0)
@@ -39,12 +39,13 @@ class Script_Processor:
                 else:
                     self._stack.push(item)
                 print(self._stack._contents)
-            return self._stack
+                
         except Exception as e:
             print("Script failed:",e)
             self._stack.flush()
             self._stack.push(False)
-            
+
+        return self.Validate_Stack()
             
         
     def create_commands(self):
@@ -78,8 +79,15 @@ class Script_Processor:
         A,B = self._stack.pop(),self._stack.pop()
         if not A == B:
             self._stack.push(False)
+
+
+    def Validate_Stack(self):
+        x = []
+        while self._stack.get_size() > 0:
+            x.append(self._stack.pop())
+        return (all(x) or len(x) == 0)
         
         
-        
+
     
     

@@ -60,12 +60,12 @@ class DBConnection:
         self._cur.execute("INSERT INTO UTXO VALUES(%s,%s,%s,%s,%s)",(Transaction_Hash,Transaction_Text,Index,Output,Block_Hash))
         self._db_con.commit()
 
-    def Get_Transaction(self,Transaction_Hash):
-        self._cur.execute("SELECT * FROM UTXO WHERE Transaction_Hash = %s",(Transaction_Hash,))
+    def Get_Transaction(self,Transaction_Hash,Transaction_Index):
+        self._cur.execute("SELECT * FROM UTXO WHERE Transaction_Hash = %s AND Transaction_Index = %s",(Transaction_Hash,Transaction_Index))
         return self._cur.fetchall()
 
-    def Remove_Transaction(self,Transaction_Hash):
-        self._cur.execute("DELETE FROM UTXO WHERE Transaction_Hash = %s",(Transaction_Hash,))
+    def Remove_Transaction(self,Transaction_Hash,Transaction_Index):
+        self._cur.execute("DELETE FROM UTXO WHERE Transaction_Hash = %s AND Transaction_Index = %s",(Transaction_Hash,Transaction_Index))
         self._db_con.commit()
 
 

@@ -38,6 +38,10 @@ class Wallet:
 
     def Get_Addresses(self):
         return self._Wallet.keys()
+
+    def Has_Address(self,Address):
+        return Address in self._Wallet
+    
     
 
     
