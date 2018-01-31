@@ -62,11 +62,10 @@ class Script_Processor:
         hash_item = self._stack.pop()
         self._stack.push(hashlib.sha256(str(hash_item).encode()).hexdigest())
 
-    def OP_Verify(self):  # Signature data public_key
-        public_key = self._stack.pop()
+    def OP_Verify(self):  # Signature public_key data
         data = hashlib.sha256(str(self._stack.pop()).encode()).digest()
+        public_key = self._stack.pop()
         sig = codecs.decode(self._stack.pop().encode(),"base64")
-        print(sig)
         PuKO = ecdsa.VerifyingKey.from_pem(public_key)
 ##        try:
         self._stack.push(PuKO.verify(sig,data))

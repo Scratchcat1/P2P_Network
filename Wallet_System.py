@@ -41,6 +41,8 @@ class Wallet:
 
     def Has_Address(self,Address):
         return Address in self._Wallet
+
+    
     
     
 
