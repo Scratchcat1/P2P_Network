@@ -19,8 +19,8 @@ class Wallet:
         PrKO = ecdsa.SigningKey.generate()
         PuKO = PrKO.get_verifying_key()
         Address = hashlib.sha256(PuKO.to_pem()).hexdigest()
-        print(Address)
-        print(PrKO.to_pem().decode())
+##        print(Address)
+##        print(PrKO.to_pem().decode())
         self._Wallet[Address] = {
             "Private_Key":PrKO.to_pem().decode(),
             "Public_Key":PuKO.to_pem().decode(),

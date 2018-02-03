@@ -1,16 +1,28 @@
 import Database_System,Script_System,json,copy,hashlib
 
 class Transaction:
-    def __init__(self):
+    def __init__(self,db_con = Database_System.DBConnection()):
         self._in = []
         self._out = []
         self._TimeStamp = 0
-        self._db_con = Database_System.DBConnection()
+        self._db_con = db_con
 
     def Import(self,Transaction):
         self._in = Transaction["in"]
         self._out = Transaction["out"]
         self._TimeStamp = Transaction["TimeStamp"]
+
+    def json_import(self,Transaction):
+        self.Import(json.loads(Transaction))
+
+    def Export(self):
+        return {
+            "in":self._in,
+            "out":self._out,
+            "TimeStamp":self._TimeStamp}
+
+    def json_export(self):
+        return json.dumps(self.Export(),sort_keys = True)
 
     def Add_Input(self,Prev_Transaction_Hash,Index = 0):
         utxo = Get_Prev_Transaction(self._db_con,Prev_Transaction_Hash,Index)
@@ -34,7 +46,7 @@ class Transaction:
 
     def Sign(self,Wallet,TimeStamp):
         self._TimeStamp = TimeStamp
-        raw_signature = Get_Transaction_Signature(self.Export())
+        raw_signature = self.Raw_Transaction_Sig(self.Export())
         for tx_in in self._in:
             address = Find_Address(Wallet,Get_Prev_Transaction(self._db_con,tx_in["Prev_Tx"],tx_in["Index"])["ScriptPubKey"])
             public_key = Wallet.Get_Public_Key(address)
@@ -45,7 +57,7 @@ class Transaction:
     def Verify(self):
         self.Verify_Values()
         SP = Script_System.Script_Processor()
-        raw_sig = Get_Transaction_Signature(self.Export())
+        raw_sig = self.Raw_Transaction_Sig(self.Export())
         for tx_in in self._in:
             prev_tx = Get_Prev_Transaction(self._db_con,tx_in["Prev_Tx"],tx_in["Index"])
             if not SP.process(tx_in["Sig"]+ "  " + raw_sig + "  " + prev_tx["ScriptPubKey"]):
@@ -66,15 +78,19 @@ class Transaction:
             raise Exception("Outputs greater than input")
         return sum_inputs - sum_outputs
 
+
+    def Raw_Transaction_Sig(self):
+        Transaction_Copy = json.loads(json.dumps(self.Export())) # forms independant copy of transaction.
+        for tx_in in Transaction_Copy["in"]:
+            tx_in["Sig"] = ""
+        raw_sig = hashlib.sha256(json.dumps(Transaction_Copy,sort_keys = True).encode()).hexdigest()
+        return raw_sig
+
             
 
-    
 
-    def Export(self):
-        return {
-            "in":self._in,
-            "out":self._out,
-            "TimeStamp":self._TimeStamp}
+    def Transaction_Hash(self):
+        return hashlib.sha256(self.json_export().encode()).hexdigest()
             
 
 
@@ -165,13 +181,6 @@ def Check_Output_Values(Output_Transactions,funds_available):
     for transaction in Output_Transactions:
         sum_out += transaction["Value"]
     return sum_out <= funds_available
-
-def Get_Transaction_Signature(Transaction):
-    Transaction_Copy = json.loads(json.dumps(Transaction)) # forms independant copy of transaction.
-    for tx_in in Transaction_Copy["in"]:
-        tx_in["Sig"] = ""
-    raw_sig = hashlib.sha256(json.dumps(Transaction_Copy,sort_keys = True).encode()).hexdigest()
-    return raw_sig
 
 def Check_Outputs_For_Negative(Outputs):
     for output in Outputs:
