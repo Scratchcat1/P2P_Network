@@ -1,10 +1,13 @@
 import Database_System,Script_System,json,copy,hashlib
 
 class Transaction:
-    def __init__(self,db_con = Database_System.DBConnection()):
+    def __init__(self,db_con = None):
         self._in = []
         self._out = []
         self._TimeStamp = 0
+
+        if db_con is None:
+            db_con = Database_System.DBConnection()
         self._db_con = db_con
 
     def Import(self,Transaction):
@@ -23,6 +26,19 @@ class Transaction:
 
     def json_export(self):
         return json.dumps(self.Export(),sort_keys = True)
+
+    #############################################
+
+    def Get_Inputs(self):
+        return self._in
+    def Get_Outputs(self):
+        return self._out
+    def Get_TimeStamp(self):
+        return self._TimeStamp
+
+    ##############################################
+
+    
 
     def Add_Input(self,Prev_Transaction_Hash,Index = 0):
         utxo = Get_Prev_Transaction(self._db_con,Prev_Transaction_Hash,Index)

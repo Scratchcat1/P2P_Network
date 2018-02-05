@@ -71,14 +71,14 @@ class DBConnection:
 
     ##### Blocks ######
 
-    def Add_Block(self,Block_Hash,Block_Number,Work,Previous_Block_Hash):
+    def Add_Block(self,Block_Hash,Block_Number,Work,Previous_Block_Hash,TimeStamp):
         self._cur.execute("SELECT Sum_Work FROM Blocks WHERE Block_Hash = %s",(Previous_Block_Hash,))
         Sum_Work = self._cur.fetchall()
         if len(Sum_Work) == 0:
             Sum_Work = 0
         else:
             Sum_Work = Sum_Work[0][0]
-        self._cur.execute("INSERT INTO Blocks VALUES(%s,%s,%s,%s,%s)",(Block_Hash,Block_Number,Work,Sum_Work+Work,Previous_Block_Hash))
+        self._cur.execute("INSERT INTO Blocks VALUES(%s,%s,%s,%s,%s,%s)",(Block_Hash,Block_Number,Work,Sum_Work+Work,Previous_Block_Hash,TimeStamp))
         self._db_con.commit()
 
     def Remove_Block(self,Block_Hash):
@@ -131,7 +131,7 @@ class DBConnection:
         for item in TABLES:  # Drops all tables
             self._cur.execute("DROP TABLE IF EXISTS {0}".format(item))
         
-        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Work INT, Sum_Work INT, Previous_Block_Hash VARCHAR(32))")
+        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Work INT, Sum_Work INT, Previous_Block_Hash VARCHAR(32), TimeStamp INT)")
         #self._cur.execute("CREATE TABLE Leaf_Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Sum_Work INT)")
         self._cur.execute("CREATE TABLE UTXO(Transaction_Hash VARCHAR(32) PRIMARY KEY, Transaction TEXT, Transaction_Index INT, Output INT, Block_Hash VARCHAR(32))")
         self._cur.execute("CREATE TABLE Peers(IP VARCHAR(15) ,Port INT, Type TEXT, Flags TEXT, Last_Contact INT, Last_Ping INT, PRIMARY KEY(IP,Port))")
