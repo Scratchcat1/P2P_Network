@@ -10,7 +10,7 @@ class Merkle_Tree:
 
     def Calculate_Layers(self):
         Layers = []
-        Layer = sorted(self._contents)
+        Layer = Extend_List(sorted(self._contents))  #Ensure at least length 2
         while len(Layer) > 1:
             Layer = Merge_Layer(Layer)
 ##            print(Layer)

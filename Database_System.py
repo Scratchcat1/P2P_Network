@@ -65,8 +65,11 @@ class DBConnection:
         return self._cur.fetchall()
 
     def Remove_Transaction(self,Transaction_Hash,Transaction_Index):
+        self._cur.execute("SELECT * FROM UTXO WHERE Transaction_Hash = %s AND Transaction_Index = %s",(Transaction_Hash,Transaction_Index))
+        transaction = self._cur.fetchall()[0]  #Used to obtain the details of the transaction to be removed, this will be returned i.e. to store the changes a block has made
         self._cur.execute("DELETE FROM UTXO WHERE Transaction_Hash = %s AND Transaction_Index = %s",(Transaction_Hash,Transaction_Index))
         self._db_con.commit()
+        return transaction
 
 
     ##### Blocks ######

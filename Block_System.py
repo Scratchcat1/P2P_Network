@@ -78,8 +78,20 @@ class Block:
     ######### Verification ##############
     
     def Verify_Transactions(self):
+        coinbase_count = 0
+        coinbase_tx = None
+        fee = 0
         for tx in self.Get_Transaction_Objects():
-            tx.Verify()
+            if tx.Is_Coinbase():   #Coinbase does not need to verify inputs as it has none
+                coinbase_count += 1
+                coinbase_tx = tx
+            else:
+                fee += tx.Verify()
+                
+        if coinbase_count > 1:
+            raise Exception("More than one coinbase transaction is not allowed")
+        if fee+50 < coinbase_tx.Get_Fee()*-1:
+            raise Exception("Coinbase output more than fees + 50")
 
     def Verify_Merkle_Root(self):
         if self.Calculate_Merkle_Root() != self._Merkle_Root:
@@ -87,15 +99,15 @@ class Block:
 
     def Verify_Prev_Details(self):
         block = self._db_con.Get_Block(self._Prev_Block_Hash)
-        if len(block) == 0:
-            raise Exception("No such previous Block")
-        block = block[0]
-        if block[1] != self.Block_Number -1:  #Block numbers not sequential
-            raise Exception("Block number is not sequential")
+##        if len(block) == 0:
+##            raise Exception("No such previous Block")
+##        block = block[0]
+##        if block[1] != self.Block_Number -1:  #Block numbers not sequential
+##            raise Exception("Block number is not sequential")
 
     def Verify_Block_Hash(self):
-        json_source = self.Get_Raw_Hash()
-        hash_value = hashlib.sha256(json_source.encode()).hex_digest()
+        json_source = self.Get_Raw_Hash_Source()
+        hash_value = hashlib.sha256(json_source.encode()).hexdigest()
         if not (hash_value == self._Block_Hash and int(hash_value,16) < 2**256 - self._Difficulty):
             raise Exception("Invalid block hash value")
 
@@ -112,16 +124,16 @@ class Block:
             prev_blocks.append(block[0])
             block_hash = block[4] # next prev block hash
 
-        median_time = sum([block[5] for block in prev_blocks])/len(prev_blocks)
-        if median_time > self._TimeStamp:
-            raise Exception("Block is older than median time")
+##        median_time = sum([block[5] for block in prev_blocks])/len(prev_blocks)
+##        if median_time > self._TimeStamp:
+##            raise Exception("Block is older than median time")
 
     def Verify(self, Time, Difficulty):
         if not self._Difficulty == Difficulty:
             raise Exception("Block has invalid difficulty value")
         self.Verify_Prev_Details()
         self.Verify_Block_Hash()
-        self.Verify_TimeStamp()
+        self.Verify_TimeStamp(Time)
         self.Verify_Merkle_Root()
         self.Verify_Transactions()
 
@@ -135,6 +147,7 @@ class Block:
             block_hash = hashlib.sha256(raw_hash_source.encode()).hexdigest()
             if int(block_hash,16) < 2**256 - self._Difficulty:
                 print("Found block hash:",block_hash,"after",i,"iterations")
+                self._Block_Hash = block_hash
                 return block_hash
             
         print("Failed to find hash after ",iterations,"iterations")
@@ -142,14 +155,61 @@ class Block:
 
 
     def Update_UTXO(self):  #Remove inputs from utxo and add outputs to utxo
+        old_utxos = []# this will contain all the old transaction details. If a rebase were necessary then the transaction details would be included with the block which changed them and would not need to be obtained from searching the blockchain
         for tx in self.Get_Transaction_Objects():
             for tx_in in tx.Get_Inputs():
-                self._db_con.Remove_Transaction(tx_in["Prev_Tx"],tx_in["Index"])
-            for tx_out in tx.Get_Outputs():
-                self._db_con.Add_Transaction()
+                old_utxos.append(self._db_con.Remove_Transaction(tx_in["Prev_Tx"],tx_in["Index"]))
+            for index,tx_out in enumerate(tx.Get_Outputs()):
+                self._db_con.Add_Transaction(tx.Transaction_Hash(),json.dumps(tx_out),index,tx_out["Value"],self._Block_Hash)
+                
+        return old_utxos
+
+    def Rollback_UTXO(self,old_utxos):
+        for old_utxo in old_utxos:
+            self._db_con.Add_Transaction(*old_utxo)  #old_tx is dump of utxo, this adds it back in
+
+        for tx in self.Get_Transaction_Objects():
+            for index,tx_out in enumerate(tx.Get_Outputs()):
+                self._db_con.Remove_Transaction(tx.Transaction_Hash(),index)
+                
         
     
         
     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def test():
+    import Wallet_System
+    w = Wallet_System.Wallet()
+    w.Load_Wallet()
+    t = Transaction_System.Transaction()
+    b = Block(Block_Number = 0)
+    t.Add_Output(50,Transaction_System.Pay_To_Address_Script('258a4410e9d9cea10cd5efd9885422ad69b1bec8dd2c9555c37f87587a47b222'),0)
+    b.Add_Transaction(t)
+    print(t.Is_Coinbase())
+    b.Set_Merkle_Root(b.Calculate_Merkle_Root())
+    b.Mine()
+    b.Verify(1000,-1)
+    
+
+
+
+
+
     
         

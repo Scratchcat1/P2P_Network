@@ -35,6 +35,8 @@ class Transaction:
         return self._out
     def Get_TimeStamp(self):
         return self._TimeStamp
+    def Is_Coinbase(self):
+        return not(len(self._in))  #if has no inputs then must be coinbase
 
     ##############################################
 
@@ -80,6 +82,12 @@ class Transaction:
                 raise Exception("Transaction input does not satisfy the locking script of the previous transaction")
 
     def Verify_Values(self):
+        fee = self.Get_Fee()
+        if fee < 0:
+            raise Exception("Outputs greater than input")
+        return fee
+
+    def Get_Fee(self):
         sum_inputs = 0
         sum_outputs = 0
         for tx_in in self._in:
@@ -89,10 +97,9 @@ class Transaction:
             if value < 0:
                 raise Exception("Negative Values are illegal")
             sum_outputs += value
-            
-        if sum_inputs < sum_outputs:
-            raise Exception("Outputs greater than input")
-        return sum_inputs - sum_outputs
+
+        return sum_inputs-sum_outputs
+        
 
 
     def Raw_Transaction_Sig(self):
