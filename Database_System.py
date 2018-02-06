@@ -130,13 +130,13 @@ class DBConnection:
 
     def ResetDatabase(self):
         self._cur.execute("SET FOREIGN_KEY_CHECKS = 0")  #Otherwise dropping tables will raise errors.
-        TABLES = ["Blocks","Leaf_Blocks","UTXO","Peers","Alert_Users"]
+        TABLES = ["Blocks","UTXO","Peers","Alert_Users"]
         for item in TABLES:  # Drops all tables
             self._cur.execute("DROP TABLE IF EXISTS {0}".format(item))
         
-        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Work INT, Sum_Work INT, Previous_Block_Hash VARCHAR(32), TimeStamp INT)")
+        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(64) PRIMARY KEY, Block_Number INT, Work INT, Sum_Work INT, Previous_Block_Hash VARCHAR(64), TimeStamp INT)")
         #self._cur.execute("CREATE TABLE Leaf_Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Sum_Work INT)")
-        self._cur.execute("CREATE TABLE UTXO(Transaction_Hash VARCHAR(32) PRIMARY KEY, Transaction TEXT, Transaction_Index INT, Output INT, Block_Hash VARCHAR(32))")
+        self._cur.execute("CREATE TABLE UTXO(Transaction_Hash VARCHAR(64) PRIMARY KEY, Transaction TEXT, Transaction_Index INT, Output INT, Block_Hash VARCHAR(64))")
         self._cur.execute("CREATE TABLE Peers(IP VARCHAR(15) ,Port INT, Type TEXT, Flags TEXT, Last_Contact INT, Last_Ping INT, PRIMARY KEY(IP,Port))")
         self._cur.execute("CREATE TABLE Alert_Users(Username VARCHAR(16) PRIMARY KEY, Public_Key VARCHAR(200), Private_Key VARCHAR(200), Max_Level INT)")
         

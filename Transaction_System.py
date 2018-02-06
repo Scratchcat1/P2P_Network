@@ -37,6 +37,13 @@ class Transaction:
         return self._TimeStamp
     def Is_Coinbase(self):
         return not(len(self._in))  #if has no inputs then must be coinbase
+    def Get_Input_UTXOs(self):
+        input_utxos = []
+        for tx_in in self._in:
+            clean_tx_in = tx_in
+            clean_tx_in.pop("Sig")
+            input_utxos.append(clean_tx_in)
+        return input_utxos
 
     ##############################################
 

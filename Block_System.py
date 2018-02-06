@@ -81,12 +81,17 @@ class Block:
         coinbase_count = 0
         coinbase_tx = None
         fee = 0
+        used_utxos = set()
         for tx in self.Get_Transaction_Objects():
             if tx.Is_Coinbase():   #Coinbase does not need to verify inputs as it has none
                 coinbase_count += 1
                 coinbase_tx = tx
             else:
                 fee += tx.Verify()
+                for input_utxo in tx.Get_Input_UTXOs():  #Ensures that the utxo has not been used before
+                    if input_utxo in used_utxos:
+                        raise Exception("Two transactions reference same input")
+                    used_utxos.add(input_utxo)
                 
         if coinbase_count > 1:
             raise Exception("More than one coinbase transaction is not allowed")
@@ -99,11 +104,11 @@ class Block:
 
     def Verify_Prev_Details(self):
         block = self._db_con.Get_Block(self._Prev_Block_Hash)
-##        if len(block) == 0:
-##            raise Exception("No such previous Block")
-##        block = block[0]
-##        if block[1] != self.Block_Number -1:  #Block numbers not sequential
-##            raise Exception("Block number is not sequential")
+        if len(block) == 0:
+            raise Exception("No such previous Block")
+        block = block[0]
+        if block[1] != self.Block_Number -1:  #Block numbers not sequential
+            raise Exception("Block number is not sequential")
 
     def Verify_Block_Hash(self):
         json_source = self.Get_Raw_Hash_Source()
@@ -124,16 +129,16 @@ class Block:
             prev_blocks.append(block[0])
             block_hash = block[4] # next prev block hash
 
-##        median_time = sum([block[5] for block in prev_blocks])/len(prev_blocks)
-##        if median_time > self._TimeStamp:
-##            raise Exception("Block is older than median time")
+        median_time = sum([block[5] for block in prev_blocks])/len(prev_blocks)
+        if median_time > self._TimeStamp:
+            raise Exception("Block is older than median time")
 
     def Verify(self, Time, Difficulty):
         if not self._Difficulty == Difficulty:
             raise Exception("Block has invalid difficulty value")
-        self.Verify_Prev_Details()
+##        self.Verify_Prev_Details()
         self.Verify_Block_Hash()
-        self.Verify_TimeStamp(Time)
+##        self.Verify_TimeStamp(Time)
         self.Verify_Merkle_Root()
         self.Verify_Transactions()
 
@@ -155,6 +160,7 @@ class Block:
 
 
     def Update_UTXO(self):  #Remove inputs from utxo and add outputs to utxo
+        print("Adding block",self._Block_Hash,"UTXOs to the UTXO")
         old_utxos = []# this will contain all the old transaction details. If a rebase were necessary then the transaction details would be included with the block which changed them and would not need to be obtained from searching the blockchain
         for tx in self.Get_Transaction_Objects():
             for tx_in in tx.Get_Inputs():
@@ -165,12 +171,15 @@ class Block:
         return old_utxos
 
     def Rollback_UTXO(self,old_utxos):
+        print("Removing block",self._Block_Hash,"UTXOs to the UTXO")
         for old_utxo in old_utxos:
             self._db_con.Add_Transaction(*old_utxo)  #old_tx is dump of utxo, this adds it back in
 
         for tx in self.Get_Transaction_Objects():
             for index,tx_out in enumerate(tx.Get_Outputs()):
-                self._db_con.Remove_Transaction(tx.Transaction_Hash(),index)
+                print(tx.Transaction_Hash(),index)
+                print(self._Block_Hash)
+                print(self._db_con.Remove_Transaction(tx.Transaction_Hash(),index))
                 
         
     
@@ -193,22 +202,22 @@ class Block:
 
 
 
-def test():
+def test(bn = 0,tim = 0,dif = 1,pblk = ""):
     import Wallet_System
     w = Wallet_System.Wallet()
     w.Load_Wallet()
     t = Transaction_System.Transaction()
-    b = Block(Block_Number = 0)
+    b = Block(Block_Number = bn,Difficulty = dif,Prev_Block_Hash=pblk)
     t.Add_Output(50,Transaction_System.Pay_To_Address_Script('258a4410e9d9cea10cd5efd9885422ad69b1bec8dd2c9555c37f87587a47b222'),0)
+    t._TimeStamp = tim
     b.Add_Transaction(t)
     print(t.Is_Coinbase())
     b.Set_Merkle_Root(b.Calculate_Merkle_Root())
     b.Mine()
-    b.Verify(1000,-1)
+    b.Verify(tim,1)
+    return w,t,b
     
-
-
-
+    
 
 
     
