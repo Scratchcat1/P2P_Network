@@ -91,6 +91,40 @@ class Chain:
             current_block_hash = self._db_con.Get_Block(current_block_hash)[0][4]
             path.append(current_block_hash)
         return path[:-1]  #This removes the target_block_hash from the list
+
+    ###################################################
+
+    def Find_Difficulty(self):
+        blocks = []
+        current_hash = self.get_highest_block_hash()
+
+        block_number = 1  
+        while block_number % 2016 != 0: # Cycles until a section of 2016 blocks could be found, aligns on boundary ?
+            block_info = self._db_con.Get_Block(current_hash)
+            if len(block_info) == 0:
+                break  # No more blocks found to cancel
+            block_number = block_info[0][1]
+            current_hash = block_info[0][4]  # next hash
+            
+        for x in range(2016):   #Attempts to get 2016 blocks
+            block_info = self._db_con.Get_Block(current_hash)
+            if len(block_info) == 0:
+                break  # No more blocks found to cancel
+            blocks.append(block_info[0])
+            current_hash = block_info[0][4]  # next hash
+
+        sum_diff = 0
+        for block_info in blocks:
+            sum_diff += block_info[2]
+        print( blocks[0][5],blocks[-1][5])
+        if len(blocks) > 0 and blocks[0][5] != blocks[-1][5]:
+            diff = (2*7*24*3600)/(max(blocks[0][5],blocks[-1][5])-min(blocks[0][5],blocks[-1][5])) * sum_diff/len(blocks)   # TargetTime/actualTime * current difficulty, if T < a difficulty is reduced
+        else:
+            print("Using default difficulty")
+            diff = 2**256 - 2**250  #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
+
+        return diff
+            
             
             
 def parent_set_add(db_con,hash_item,hash_set):

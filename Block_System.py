@@ -34,6 +34,9 @@ class Block:
             "TimeStamp":self._TimeStamp,
             "Nonce":self._Nonce,}
 
+    def Set_TimeStamp(self,TimeStamp):
+        self._TimeStamp = TimeStamp
+
     def Get_Block_Hash(self):
         return self._Block_Hash
     def Get_Block_Number(self):
@@ -107,7 +110,7 @@ class Block:
         if len(block) == 0:
             raise Exception("No such previous Block")
         block = block[0]
-        if block[1] != self.Block_Number -1:  #Block numbers not sequential
+        if block[1] != self._Block_Number -1:  #Block numbers not sequential
             raise Exception("Block number is not sequential")
 
     def Verify_Block_Hash(self):
@@ -127,7 +130,7 @@ class Block:
             if len(block) == 0:
                 break
             prev_blocks.append(block[0])
-            block_hash = block[4] # next prev block hash
+            block_hash = block[0][4] # next prev block hash
 
         median_time = sum([block[5] for block in prev_blocks])/len(prev_blocks)
         if median_time > self._TimeStamp:
@@ -204,17 +207,20 @@ class Block:
 
 def test(bn = 0,tim = 0,dif = 1,pblk = ""):
     import Wallet_System
-    w = Wallet_System.Wallet()
-    w.Load_Wallet()
+##    w = Wallet_System.Wallet()
+##    w.Load_Wallet()
+    w = None
     t = Transaction_System.Transaction()
     b = Block(Block_Number = bn,Difficulty = dif,Prev_Block_Hash=pblk)
     t.Add_Output(50,Transaction_System.Pay_To_Address_Script('258a4410e9d9cea10cd5efd9885422ad69b1bec8dd2c9555c37f87587a47b222'),0)
     t._TimeStamp = tim
+    print(t.Transaction_Hash())
     b.Add_Transaction(t)
-    print(t.Is_Coinbase())
+    b.Set_TimeStamp(tim)
+##    print(t.Is_Coinbase())
     b.Set_Merkle_Root(b.Calculate_Merkle_Root())
     b.Mine()
-    b.Verify(tim,1)
+    b.Verify(tim,dif)
     return w,t,b
     
     
