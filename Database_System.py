@@ -81,7 +81,7 @@ class DBConnection:
             Sum_Work = 0
         else:
             Sum_Work = Sum_Work[0][0]
-        self._cur.execute("INSERT INTO Blocks VALUES(%s,%s,%s,%s,%s,%s)",(Block_Hash,Block_Number,Work,Sum_Work+Work,Previous_Block_Hash,TimeStamp))
+        self._cur.execute("INSERT INTO Blocks VALUES(%s,%s,%s,%s,%s,%s,0)",(Block_Hash,Block_Number,Work,Sum_Work+Work,Previous_Block_Hash,TimeStamp))
         self._db_con.commit()
 
     def Remove_Block(self,Block_Hash):
@@ -101,6 +101,27 @@ class DBConnection:
         Sum_Work = self._cur.fetchall()[0][0]
         self._cur.execute("SELECT * FROM Blocks WHERE Sum_Work = %s ORDER BY Block_Number DESC",(Sum_Work,))
         return self._cur.fetchall()
+
+    ####
+
+    def Is_Best_Chain_Block(self,block_hash):  #Returns if the block is part of the main chain.
+        self._cur.execute("SELECT 1 FROM Blocks WHERE Block_Hash = %s AND On_Best_Chain = 1",(block_hash,))
+        return len(self._cur.fetchall()) > 0
+
+    def Set_Block_On_Best_Chain(self,block_hash,value):
+        self._cur.execute("UPDATE Blocks SET On_Best_Chain = %s WHERE Block_Hash = %s",(value,block_hash))
+        self._db_con.commit()
+
+    def Find_Best_Chain_Section(self,block_hash,number = 500):     #Find a the child blocks which are on the best chain as a list of hashes
+        self._cur.execute("SELECT Block_Number FROM Blocks WHERE Block_Hash = %s",(block_hash,))
+        block_info = self._cur.fetchall()
+        if len(block_info) == 0:
+            raise Exception("This is not a valid block")
+        
+        block_num = block_info[0][0]
+        self._cur.execute("SELECT Block_Hash FROM Blocks WHERE Block_Number > %s AND Block_Number < %s AND On_Best_Chain = 1 ORDER BY Block_Number DESC",(block_num, block_num+number))
+        hash_list = [item[0] for item in self._cur.fetchall()]  #Converts the result into a list of hashes
+        return hash_list
     
 
 ##    ##### Leaf Blocks  ######
@@ -134,7 +155,7 @@ class DBConnection:
         for item in TABLES:  # Drops all tables
             self._cur.execute("DROP TABLE IF EXISTS {0}".format(item))
         
-        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(64) PRIMARY KEY, Block_Number INT, Work INT, Sum_Work INT, Previous_Block_Hash VARCHAR(64), TimeStamp INT)")
+        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(64) PRIMARY KEY, Block_Number INT, Work INT, Sum_Work INT, Previous_Block_Hash VARCHAR(64), TimeStamp INT, On_Best_Chain INT)")
         #self._cur.execute("CREATE TABLE Leaf_Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Sum_Work INT)")
         self._cur.execute("CREATE TABLE UTXO(Transaction_Hash VARCHAR(64) PRIMARY KEY, Transaction TEXT, Transaction_Index INT, Output INT, Block_Hash VARCHAR(64))")
         self._cur.execute("CREATE TABLE Peers(IP VARCHAR(15) ,Port INT, Type TEXT, Flags TEXT, Last_Contact INT, Last_Ping INT, PRIMARY KEY(IP,Port))")

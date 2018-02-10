@@ -1,4 +1,4 @@
-import Networking_System,time,Database_System,Alert_System
+import Networking_System,time,Database_System,Alert_System,Chain_System,Block_System,Transaction_System,Mempool_System
 
 class Time_Keeper:
     def __init__(self):
@@ -48,6 +48,9 @@ class Main_Handler:
         self._Network_Nodes = {}  #Address :Network_Node
         self._Time = Time_Keeper()
 
+        self._Mempool = Mempool_System.Mempool()  #Stores unconfirmed transactions
+        self._Chain = Chain_System.Chain(self._Mempool)
+
         self._Network_Nodes_Check_Timer = Timer(300)  #Every 300 seconds check nodes
         print("Main_Handler started.")
 
@@ -83,8 +86,13 @@ class Main_Handler:
                 Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
             if message["Address"] in self._Network_Nodes:
                 self._Network_Nodes[message["Address"]].Set_Last_Contact(self._Time.time())  #Mark as last contact
-                
-                
+
+
+    ################################
+    #                              #
+    #    Below is misc/maintanace  #
+    #                              #
+    ################################
 
 
     def On_Peer_Connected(self,Message):
@@ -142,8 +150,21 @@ class Main_Handler:
         self._Node_Info.Set_Address(Message["Payload"]["Address"])
 
     
+    #####################################################################
 
 
+    ################################
+    #                              #
+    #    Below is blockchain etc   #
+    #                              #
+    ################################
+
+
+    
+
+
+
+    #####################################################################
 
 
     def Spawn_Events(self):

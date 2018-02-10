@@ -162,10 +162,11 @@ class Block:
         return False
 
 
-    def Update_UTXO(self):  #Remove inputs from utxo and add outputs to utxo
+    def Update_UTXO(self,Mempool):  #Remove inputs from utxo and add outputs to utxo
         print("Adding block",self._Block_Hash,"UTXOs to the UTXO")
         old_utxos = []# this will contain all the old transaction details. If a rebase were necessary then the transaction details would be included with the block which changed them and would not need to be obtained from searching the blockchain
         for tx in self.Get_Transaction_Objects():
+            Mempool.remove_tx(tx.Transaction_Hash()) #Removes the relevant transactions which are in the block
             for tx_in in tx.Get_Inputs():
                 old_utxos.append(self._db_con.Remove_Transaction(tx_in["Prev_Tx"],tx_in["Index"]))
             for index,tx_out in enumerate(tx.Get_Outputs()):
@@ -173,20 +174,22 @@ class Block:
                 
         return old_utxos
 
-    def Rollback_UTXO(self,old_utxos):
+    def Rollback_UTXO(self,old_utxos,Mempool):
         print("Removing block",self._Block_Hash,"UTXOs to the UTXO")
         for old_utxo in old_utxos:
             self._db_con.Add_Transaction(*old_utxo)  #old_tx is dump of utxo, this adds it back in
 
         for tx in self.Get_Transaction_Objects():
+            if not tx.Is_Coinbase(): #Coinbase transactions should not be readded
+                Mempool.add_transaction_json(tx.Transaction_Hash(),tx.json_export(),tx.Get_Fee())  #Readds the transaction
             for index,tx_out in enumerate(tx.Get_Outputs()):
-                print(tx.Transaction_Hash(),index)
-                print(self._Block_Hash)
-                print(self._db_con.Remove_Transaction(tx.Transaction_Hash(),index))
+##                print(tx.Transaction_Hash(),index)
+##                print(self._Block_Hash)
+                self._db_con.Remove_Transaction(tx.Transaction_Hash(),index)
                 
         
     
-        
+    
     
 
 

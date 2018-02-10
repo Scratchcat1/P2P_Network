@@ -1,8 +1,9 @@
 import Database_System,Block_System,json,os
 
 class Chain:
-    def __init__(self):
+    def __init__(self,Mempool):
         self._db_con = Database_System.DBConnection()
+        self._Mempool = Mempool  #Contains a reference to the Mempool object
         try:
             self._highest_block_hash = self.get_highest_block_hash()
         except:
@@ -31,7 +32,8 @@ class Chain:
             self._highest_block_hash = block.Get_Block_Hash()  #This block has become the new highest block hash
 
         if block.Get_Block_Hash() == self._highest_block_hash:  # Only if this block extends the valid chain is the UTXO modified
-            rollback_data = block.Update_UTXO()
+            rollback_data = block.Update_UTXO(self._Mempool)
+            self._db_con.Set_Block_On_Best_Chain(block.Get_Block_Hash(),1)  #Mark this block as part of the best chain
             self.add_block_rollback(block.Get_Block_Hash(),rollback_data)
         
 
@@ -50,6 +52,9 @@ class Chain:
     def get_highest_block_hash(self):
         return self._db_con.Get_Highest_Work_Block()[0][0]
 
+    def has_block(self,block_hash):  #To tell if one has the block or not
+        return len(self._db_con.Get_Block(block_hash)) != 0  # If not 0 then has block
+
     def check_for_rebase(self,new_block_hash,new_block_hash_prev):
         if self._highest_block_hash == self.get_highest_block_hash(): # added to smaller chain so no height increase
             return False
@@ -66,12 +71,14 @@ class Chain:
 
         while current_hash != common_root:  #While it has not rolled back to common root node
             block = self.get_block(current_hash)
-            block.Rollback_UTXO(self.get_block_rollback(current_hash))  #readd any UTXOs and remove new outputs
-            current_hash = self._db_con.Get_Block(current_hash)[0][4] # Move to parent block
+            block.Rollback_UTXO(self.get_block_rollback(current_hash),self._Mempool)  #readd any UTXOs and remove new outputs, readds transactions to mempool
+            self._db_con.Set_Block_On_Best_Chain(block.Get_Block_Hash(),0)            #Mark this block as not on the best chain any longer
+            current_hash = self._db_con.Get_Block(current_hash)[0][4]                  # Move to parent block
 
         for current_hash in self.find_path_to_block(new_block_hash,common_root)[::-1]: # for new chain ( method returns new->old) add in utxos
             block = self.get_block(current_hash)
-            rollback_data = block.Update_UTXO()             #Adds in the UTXOs of the ancestors of the new highest block
+            rollback_data = block.Update_UTXO(self._Mempool)                             #Adds in the UTXOs of the ancestors of the new highest block, remove from mempool
+            self._db_con.Set_Block_On_Best_Chain(block.Get_Block_Hash(),1)             # Mark this block as now on the best chain.
             self.add_block_rollback(block.Get_Block_Hash(),rollback_data)
             
             
