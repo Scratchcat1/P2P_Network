@@ -80,6 +80,13 @@ class Main_Handler:
                 "Get_Peers_Response":self.On_Get_Peers_Response,
                 "Get_Address":self.On_Get_Address,
                 "Get_Address_Response":self.On_Get_Address_Response,
+
+                
+                "Inv":self.On_Inv,
+                "Get_Blocks":self.On_Get_Blocks,
+                "Get_Blocks_Full":self.On_Get_Blocks_Full,
+                "Blocks":self.On_Blocks,
+                "Transactions":self.On_Transactions,
                     }
 
             if message["Command"] in Commands:
@@ -158,6 +165,55 @@ class Main_Handler:
     #    Below is blockchain etc   #
     #                              #
     ################################
+
+    def On_Inv(self,Message):
+        for item in Message["Payload"]:
+            if item["Type"] == "Block":
+                if not self._Chain.has_block(item["Payload"]):  #If not yet has block
+                    pass  #Add to request block queue
+            elif item["Type"] == "Transaction":
+                if not self._Mempool.has_tx(item["Payload"]):  #If does not currently have transaction
+                    pass #Reqiest transaction
+
+    def On_Get_Blocks(self,Message):
+        Found = False
+        for block_hash in Message["Payload"]: # for each hash known to remote
+            if self._db_con.Is_Best_Chain_Block(block_hash):
+                self._SI.Inv(Message["Address"],self._db_con.Find_Best_Chain_Section(block_hash))  #Send next best hashes once found best chain connection
+                Found = True
+                break
+            
+        if not Found: # If remote blockchain is completely broken
+            self._SI.Inv(Message["Address"],self._db_con.Find_Best_Chain_Section(self._db_con.Get_Best_Chain_Block(0)[0][0])) #If broken send next hashes from genesis.
+                
+    def On_Get_Blocks_Full(self,Message):
+        block_jsons = []
+        for block_hash in Message["Payload"]:
+            try:
+                block_jsons.append(self._Chain.get_block_json(block_hash))
+            except:
+                print("Remote tried to request non existant block")
+        self._SI.Blocks(Message["Address"],block_jsons)
+            
+
+    def On_Blocks(self,Message):
+        for block_json in Message["Payload"]:
+            block = Block_System.Block()
+            block.import_json(block_json)
+            if block.Verify(self._Time.time(),self._Chain.get_difficulty()):
+                self._Chain.add_block(block)  #Add block if it valid
+                #rebroadcast
+
+    def On_Transactions(self,Message):
+        for tx_json in Message["Payload"]:
+            tx = Transaction_System.Transaction()
+            tx.json_import(tx_json)
+            if tx.Verify():
+                self._Mempool.add_transation_json(tx.Transaction_Hash(),tx_json,tx.Verify_Values())
+                #rebroadcast            
+                
+            
+                                    
 
 
     

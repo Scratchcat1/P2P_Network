@@ -80,13 +80,17 @@ class Transaction:
             tx_in["Sig"] = sig
 
     def Verify(self):
-        self.Verify_Values()
-        SP = Script_System.Script_Processor()
-        raw_sig = self.Raw_Transaction_Sig(self.Export())
-        for tx_in in self._in:
-            prev_tx = Get_Prev_Transaction(self._db_con,tx_in["Prev_Tx"],tx_in["Index"])
-            if not SP.process(tx_in["Sig"]+ "  " + raw_sig + "  " + prev_tx["ScriptPubKey"]):
-                raise Exception("Transaction input does not satisfy the locking script of the previous transaction")
+        try:
+            self.Verify_Values()
+            SP = Script_System.Script_Processor()
+            raw_sig = self.Raw_Transaction_Sig(self.Export())
+            for tx_in in self._in:
+                prev_tx = Get_Prev_Transaction(self._db_con,tx_in["Prev_Tx"],tx_in["Index"])
+                if not SP.process(tx_in["Sig"]+ "  " + raw_sig + "  " + prev_tx["ScriptPubKey"]):
+                    raise Exception("Transaction input does not satisfy the locking script of the previous transaction")
+            return True
+        except:
+            return False
 
     def Verify_Values(self):
         fee = self.Get_Fee()

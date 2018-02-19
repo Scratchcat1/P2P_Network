@@ -238,6 +238,40 @@ class Socket_Interface(Basic_Socket_Interface):
         self.Send(Address,Get_Address_Response_Message)
 
 
+    ################################################
+
+    def Inv(self,Address,Inventory_List):
+        Inv_Message = {"Command":"Inv",
+                       "Payload":Inventory_List}
+        self.Send(Address,Inv_Message)
+
+    def Get_Blocks(self,Address,Known_Block_Hashes_List):
+        Get_Blocks_Message = {"Command":"Get_Blocks",
+                               "Payload":Known_Block_Hashes_List}
+        self.Send(Address,Get_Blocks_Message)
+
+    def Get_Blocks_Full(self,Address,Block_Hashes_List):
+        Get_Blocks_Full_Message = {"Command":"Get_Blocks_Full",
+                                   "Payload":Block_Hashes_List}
+        self.Send(Address,Get_Blocks_Full_Message)
+
+    def Blocks(self,Address,Blocks_List):
+        Blocks_Message = {"Command":"Blocks",
+                          "Payload":Blocks_List}
+        self.Send(Address,Blocks_Message)
+
+    def Transactions(self,Address,Transactions_List):
+        Transactions_Message = {"Command":"Transactions",
+                                "Payload":Transactions_List}
+        self.Send(Address,Transactions_Message)
+
+        
+def Make_Inv_Item(Type,Payload):
+    return {"Type":Type,
+            "Payload":Payload}
+        
+
+
 
 
 class Network_Node:

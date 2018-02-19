@@ -23,6 +23,9 @@ class Block:
         self._TimeStamp = block["TimeStamp"]
         self._Nonce = block["Nonce"]
 
+    def import_json(self,block_json):
+        self.Import(json.loads(block_json))
+
     def Export(self):
         return {
             "Block_Hash":self._Block_Hash,
@@ -90,7 +93,9 @@ class Block:
                 coinbase_count += 1
                 coinbase_tx = tx
             else:
-                fee += tx.Verify()
+                if not tx.Verify():
+                    raise Exception("Transaction is not valid")
+                fee += tx.Verify_Values()
                 for input_utxo in tx.Get_Input_UTXOs():  #Ensures that the utxo has not been used before
                     if input_utxo in used_utxos:
                         raise Exception("Two transactions reference same input")
@@ -137,13 +142,17 @@ class Block:
             raise Exception("Block is older than median time")
 
     def Verify(self, Time, Difficulty):
-        if not self._Difficulty == Difficulty:
-            raise Exception("Block has invalid difficulty value")
-##        self.Verify_Prev_Details()
-        self.Verify_Block_Hash()
-##        self.Verify_TimeStamp(Time)
-        self.Verify_Merkle_Root()
-        self.Verify_Transactions()
+        try:
+            if not self._Difficulty == Difficulty:
+                raise Exception("Block has invalid difficulty value")
+            self.Verify_Prev_Details()
+            self.Verify_Block_Hash()
+            self.Verify_TimeStamp(Time)
+            self.Verify_Merkle_Root()
+            self.Verify_Transactions()
+            return True
+        except:
+            return False
 
     ###############################################
 

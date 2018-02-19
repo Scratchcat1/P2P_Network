@@ -122,7 +122,10 @@ class DBConnection:
         self._cur.execute("SELECT Block_Hash FROM Blocks WHERE Block_Number > %s AND Block_Number < %s AND On_Best_Chain = 1 ORDER BY Block_Number DESC",(block_num, block_num+number))
         hash_list = [item[0] for item in self._cur.fetchall()]  #Converts the result into a list of hashes
         return hash_list
-    
+
+    def Get_Best_Chain_Block(self,block_number):
+        self._cur.execute("SELECT * FROM Blocks WHERE Block_Number = %s and On_Best_Chain = 1",(block_number,))
+        return self._cur.fetchall()
 
 ##    ##### Leaf Blocks  ######
 ##

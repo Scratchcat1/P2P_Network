@@ -4,6 +4,7 @@ class Chain:
     def __init__(self,Mempool):
         self._db_con = Database_System.DBConnection()
         self._Mempool = Mempool  #Contains a reference to the Mempool object
+        self._difficulty = self.find_difficulty()
         try:
             self._highest_block_hash = self.get_highest_block_hash()
         except:
@@ -35,6 +36,9 @@ class Chain:
             rollback_data = block.Update_UTXO(self._Mempool)
             self._db_con.Set_Block_On_Best_Chain(block.Get_Block_Hash(),1)  #Mark this block as part of the best chain
             self.add_block_rollback(block.Get_Block_Hash(),rollback_data)
+            if block.Get_Block_Number() % 2016 == 0:
+                self._difficulty = self.find_difficulty()
+                
         
 
     def get_block_rollback(self,block_hash):
@@ -101,7 +105,10 @@ class Chain:
 
     ###################################################
 
-    def Find_Difficulty(self):
+    def get_difficulty(self):
+        return self._difficulty
+
+    def find_difficulty(self):
         blocks = []
         current_hash = self.get_highest_block_hash()
 
