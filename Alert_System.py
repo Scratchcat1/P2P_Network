@@ -1,4 +1,4 @@
-import Database_System, ecdsa, hashlib,codecs
+import Database_System, ecdsa, hashlib,codecs, base64_System
 
 def Alert_User_Verify(Current_Time,Username,Message,TimeStamp,Signature,Current_Level):
     try:
@@ -13,7 +13,7 @@ def Alert_User_Verify(Current_Time,Username,Message,TimeStamp,Signature,Current_
         if Current_Level > Max_Level:
             return False
 
-        PuKO = ecdsa.VerifyingKey.from_pem(Public_Key)
+        PuKO = ecdsa.VerifyingKey.from_string(base64_System.b64_to_bstr(Public_Key))
         Raw_Signature = hashlib.sha256((str(Username)+str(Message)+str(TimeStamp)).encode()).digest()
         print(Raw_Signature)
         return PuKO.verify(codecs.decode(Signature.encode(),"base64"),Raw_Signature)
@@ -31,12 +31,23 @@ def Sign_Alert(Username,Message,TimeStamp,Level):
 
     if Level > Max_Level:
         raise Exception("Exceeding max level for this Alert User")
-    PrKO = ecdsa.SigningKey.from_pem(Private_Key)
+    PrKO = ecdsa.SigningKey.from_string(base64_System.b64_to_bstr(Private_Key))
     Raw_Signature = hashlib.sha256((str(Username)+str(Message)+str(TimeStamp)).encode()).digest()
     Signature = PrKO.sign(Raw_Signature)
     return codecs.encode(Signature,"base64").decode()
     
     
+    
+    
+    
+    
+def Generate_Alert_User(Username = "ALERT",Level = 100):
+    DB = Database_System.DBConnection()
+    PrKO = ecdsa.SigningKey.generate()
+    PuKO = PrKO.get_verifying_key()
+
+    DB.Add_Alert_User(Username,base64_System.str_to_b64(PuKO.to_string()),
+                      base64_System.str_to_b64(PrKO.to_string()),Level)
     
     
     

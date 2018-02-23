@@ -2,7 +2,7 @@ import Merkle_Tree,Database_System,Transaction_System,json,hashlib
 
 
 class Block:
-    def __init__(self,Difficulty = -1,Block_Number = -1, Prev_Block_Hash = ""):
+    def __init__(self,Difficulty = -1,Block_Number = -1, Prev_Block_Hash = "",db_con = None):
         self._Block_Hash = ""
         self._Difficulty = Difficulty
         self._Merkle_Root = ""
@@ -11,7 +11,10 @@ class Block:
         self._Transactions = []
         self._TimeStamp = 0
         self._Nonce = 0
-        self._db_con = Database_System.DBConnection()
+
+        if db_con is None:
+            db_con = Database_System.DBConnection()  #Helps with excessive creation of connections as can use same for multiple items.
+        self._db_con = db_con
 
     def Import(self,block):
         self._Block_Hash = block["Block_Hash"]
@@ -93,8 +96,8 @@ class Block:
                 coinbase_count += 1
                 coinbase_tx = tx
             else:
-                if not tx.Verify():
-                    raise Exception("Transaction is not valid")
+                if not tx.Verify(self._TimeStamp):  #Timestamp allows checking of lock time
+                    raise Exception("Transaction",tx.Transaction_Hash()," is not valid")
                 fee += tx.Verify_Values()
                 for input_utxo in tx.Get_Input_UTXOs():  #Ensures that the utxo has not been used before
                     if input_utxo in used_utxos:
@@ -226,7 +229,7 @@ def test(bn = 0,tim = 0,dif = 1,pblk = ""):
     b = Block(Block_Number = bn,Difficulty = dif,Prev_Block_Hash=pblk)
     t.Add_Output(50,Transaction_System.Pay_To_Address_Script('258a4410e9d9cea10cd5efd9885422ad69b1bec8dd2c9555c37f87587a47b222'),0)
     t._TimeStamp = tim
-    print(t.Transaction_Hash())
+##    print(t.Transaction_Hash())
     b.Add_Transaction(t)
     b.Set_TimeStamp(tim)
 ##    print(t.Is_Coinbase())

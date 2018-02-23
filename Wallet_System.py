@@ -1,4 +1,4 @@
-import json,ecdsa,hashlib,codecs
+import json,ecdsa,hashlib,codecs,base64_System
 
 class Wallet:
     def __init__(self,wallet_file = "wallet.json"):
@@ -18,18 +18,18 @@ class Wallet:
     def Generate_New_Address(self):
         PrKO = ecdsa.SigningKey.generate()
         PuKO = PrKO.get_verifying_key()
-        Address = hashlib.sha256(PuKO.to_pem()).hexdigest()
+        Address = hashlib.sha256(base64_System.str_to_b64(PuKO.to_string(),True)).hexdigest()
 ##        print(Address)
 ##        print(PrKO.to_pem().decode())
         self._Wallet[Address] = {
-            "Private_Key":PrKO.to_pem().decode(),
-            "Public_Key":PuKO.to_pem().decode(),
+            "Private_Key":base64_System.str_to_b64(PrKO.to_string(),True),
+            "Public_Key":base64_System.str_to_b64(PuKO.to_string(),True),
             }
         return Address
 
     def Sign(self,Address,Message):
         message_hash = hashlib.sha256(str(Message).encode()).digest()
-        PrKO = ecdsa.SigningKey.from_pem(self._Wallet[Address]["Private_Key"])
+        PrKO = ecdsa.SigningKey.from_string(base64_System.b64_to_bstr(self._Wallet[Address]["Private_Key"]))
         signature = PrKO.sign(message_hash)
         return codecs.encode(signature,"base64").decode()
 

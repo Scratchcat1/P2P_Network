@@ -52,8 +52,8 @@ class Transaction:
     def Add_Input(self,Prev_Transaction_Hash,Index = 0):
         utxo = Get_Prev_Transaction(self._db_con,Prev_Transaction_Hash,Index)
         
-        if utxo["Lock_Time"] > Time:
-            raise Exception("Transaction output not yet unlocked")
+##        if utxo["Lock_Time"] > Time:
+##            raise Exception("Transaction output not yet unlocked")
 ##        tx_script = utxo["ScriptPubKey"]        
         
         self._in.append(
@@ -71,7 +71,7 @@ class Transaction:
 
     def Sign(self,Wallet,TimeStamp):
         self._TimeStamp = TimeStamp
-        raw_signature = self.Raw_Transaction_Sig(self.Export())
+        raw_signature = self.Raw_Transaction_Sig()
         for tx_in in self._in:
             address = Find_Address(Wallet,Get_Prev_Transaction(self._db_con,tx_in["Prev_Tx"],tx_in["Index"])["ScriptPubKey"])
             public_key = Wallet.Get_Public_Key(address)
@@ -79,13 +79,15 @@ class Transaction:
             sig = signature + "  " + public_key
             tx_in["Sig"] = sig
 
-    def Verify(self):
+    def Verify(self,Time):
         try:
             self.Verify_Values()
             SP = Script_System.Script_Processor()
-            raw_sig = self.Raw_Transaction_Sig(self.Export())
+            raw_sig = self.Raw_Transaction_Sig()
             for tx_in in self._in:
                 prev_tx = Get_Prev_Transaction(self._db_con,tx_in["Prev_Tx"],tx_in["Index"])
+                if prev_tx["Lock_Time"] > Time:
+                    raise Exception("Transaction output not yet unlocked")
                 if not SP.process(tx_in["Sig"]+ "  " + raw_sig + "  " + prev_tx["ScriptPubKey"]):
                     raise Exception("Transaction input does not satisfy the locking script of the previous transaction")
             return True

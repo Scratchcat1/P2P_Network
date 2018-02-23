@@ -28,7 +28,7 @@ class Mempool:
     def has_tx(self,tx_hash):
         return tx_hash in self._contents
     def remove_tx(self,tx_hash):
-        self._contents.pop(tx_hash)
+        self._contents.pop(tx_hash,None)
     def add_transaction_json(self,tx_hash,tx_json,tx_fee):
         if tx_fee >= self._min_fee and len(self._contents) <= self._max_size:
             self._contents[tx_hash] = tx_json

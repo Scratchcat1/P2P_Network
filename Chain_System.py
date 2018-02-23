@@ -1,14 +1,16 @@
-import Database_System,Block_System,json,os
+import Database_System,Block_System,json,os,Mempool_System
 
 class Chain:
     def __init__(self,Mempool):
         self._db_con = Database_System.DBConnection()
         self._Mempool = Mempool  #Contains a reference to the Mempool object
-        self._difficulty = self.find_difficulty()
         try:
             self._highest_block_hash = self.get_highest_block_hash()
-        except:
+            self._difficulty = self.find_difficulty()
+        except Exception as e:
+            print("Error creating chain, may occur on first run without genesis block! Using default attributes. Error:",e)
             self._highest_block_hash = ""
+            self._difficulty = 1
 
     def get_block_json(self,block_hash):
         with open(os.path.join("blocks","block_"+block_hash)) as file_handle:
@@ -66,7 +68,7 @@ class Chain:
             self._highest_block_hash = new_block_hash
             return False
         else:
-            print("rebasing")
+            print("Alternate chain is now longest chain. Rebasing the chain...")
             return True  # new chain has overtaken old best chain so rebase needed
 
     def rebase_chain(self,new_block_hash):
@@ -93,7 +95,6 @@ class Chain:
         while len(hash_a_set.intersection(hash_b_set)) == 0:
             hash_a,hash_a_set = parent_set_add(self._db_con,hash_a,hash_a_set)
             hash_b,hash_b_set = parent_set_add(self._db_con,hash_b,hash_b_set)
-
         return list(hash_a_set.intersection(hash_b_set))[0] # common root
 
     def find_path_to_block(self,current_block_hash,target_block_hash):
@@ -130,7 +131,8 @@ class Chain:
         sum_diff = 0
         for block_info in blocks:
             sum_diff += block_info[2]
-        print( blocks[0][5],blocks[-1][5])
+            
+##        print( blocks[0][5],blocks[-1][5])
         if len(blocks) > 0 and blocks[0][5] != blocks[-1][5]:
             diff = (2*7*24*3600)/(max(blocks[0][5],blocks[-1][5])-min(blocks[0][5],blocks[-1][5])) * sum_diff/len(blocks)   # TargetTime/actualTime * current difficulty, if T < a difficulty is reduced
         else:
@@ -149,20 +151,32 @@ def parent_set_add(db_con,hash_item,hash_set):
     return hash_item,hash_set
     
 def Generate_Genesis_Block():
-    w,t,b = Block_System.test()
-    b._db_con.ResetDatabase()
-    print(b.Get_Block_Hash())
-    c = Chain()
-    c.add_block(b)
+    w,t,block = Block_System.test()
+    block._db_con.ResetDatabase()
+    print(block.Get_Block_Hash())
+    c = Chain(Mempool_System.Mempool())
+
+    #Add genesis block to db and save file
+    c._db_con.Add_Block(block.Get_Block_Hash(),block.Get_Block_Number(),block.Get_Difficulty(),block.Get_Prev_Block_Hash(),block.Get_TimeStamp()) #Add block to db
+    c.add_block_json(block.Get_Block_Hash(),json.dumps(block.Export()))   #Save block
+
+    #No rebase as first block
+    #No need to check if top block as it is only block
+    rollback_data = block.Update_UTXO(c._Mempool)
+    c._db_con.Set_Block_On_Best_Chain(block.Get_Block_Hash(),1)  #Mark this block as part of the best chain
+    c.add_block_rollback(block.Get_Block_Hash(),rollback_data)
+    print("GENERATED GENESIS BLOCK\n")
+
 
 
 def sim():
     Generate_Genesis_Block()
-    c = Chain()
+    c = Chain(Mempool_System.Mempool())
     b = c.get_block("c18cd9812ae9fce4c9948f66629e4b0b1e89ed56ea1fc4d26cc0091723f55e16")
     for n in range(1,5):
         w,t,b = Block_System.test(bn= n, tim = n,pblk = b.Get_Block_Hash())
         c.add_block(b)
+        print("")
 
     print("")
     print("Generating side chain")
