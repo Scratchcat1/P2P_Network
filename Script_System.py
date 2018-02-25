@@ -103,6 +103,42 @@ class Script_Processor:
                 count +=1
             elif item == "ENDIF":
                 count -=1
+
+        Go_Else = True
+        for x in range(len(code_sections)-1):
+            if self._stack.pop() in ["1","True"]:
+                print(code_sections[x])
+                for item in code_sections[x][::-1]:
+                    self._Script_List.insert(0,item)
+                Go_Else = False
+                break
+        if Go_Else:
+            for item in code_sections[-1][::-1]:
+                self._Script_List.insert(0,item)
+            
+        
+            
+        #Code sections now in form [If, elif....., else]. Need code sections -1 number of operators
+##        Check_Values = [self._stack.pop() for x in range(len(code_sections)-1)]
+##
+##        Go_Else = True
+##        for x in range(len(Check_Values)):
+####            print(x, code_sections[x])
+##            if Check_Values[x] in ["1","True"]:
+##                for item in code_sections[x][::-1]:
+##                    self._Script_List.insert(0,item)
+##                Go_Else = False
+##                break
+##
+##        if Go_Else:
+##            for item in code_sections[-1][::-1]:
+##                self._Script_List.insert(0,item)
+        print("IF SYSTEM:",code_sections)
+        print("IF SYSTEM:",self._Script_List)
+            
+
+
+            
 ##        while item != "ENDIF":
 ##            count = 0
 ##            code_sections.append([])
@@ -118,7 +154,6 @@ class Script_Processor:
 ##                
 ##            if item != "ENDIF":  # If not last item
 ##                item = self._Script_List.pop(0)
-            print(code_sections)
 
 
     def Validate_Stack(self):
@@ -135,4 +170,4 @@ class Script_Processor:
     
 def if_test():
     s = Script_Processor()
-    s.process("IF  IF  IF  1  ELSE  2  ENDIF  1  2  ELSE  3  ENDIF  ELIF  2  3  4  ELSE  a  a  a  ENDIF")
+    s.process("False  True  IF  IF  IF  1  ELSE  2  ENDIF  1  2  ELSE  3  ENDIF  ELIF  2  3  4  ELSE  a  a  a  ENDIF")

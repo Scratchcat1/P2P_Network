@@ -1,10 +1,19 @@
-import Networking_System,time,Database_System,Alert_System,Chain_System,Block_System,Transaction_System,Mempool_System
+import Networking_System,Database_System,Alert_System,Chain_System,Block_System,Transaction_System,Mempool_System
+import random,time,numpy
 
 class Time_Keeper:
     def __init__(self):
         self._Offset = 0
     def adjust(self,Desired_Time):
+        print(Desired_Time-time.time())
         self._Offset = Val_Limit(Desired_Time-time.time(),3600,-3600)  #Rearranged Offset + time.time = desired_time, offset max 1 hour
+    def batch_adjust_time(self,time_lists):
+        time_lists = numpy.array(time_lists)
+        UQ,LQ = numpy.percentile(time_lists,75),numpy.percentile(time_lists,25)
+        IQR = UQ-LQ
+        filtered_time_list = list(filter(lambda x: x<UQ+IQR*1.5 and x>LQ-IQR*1.5,time_lists))  # Remove outlier
+        self.adjust(sum(filtered_time_list)/len(filtered_time_list))
+        
     def time(self):
         return time.time()+self._Offset
     def reset(self):
@@ -30,11 +39,38 @@ class Ticker:
         self._Last_Call = time.time()
     def zero(self):
         self._Last_Call = 0
+
+class Rebroadcaster(Ticker):  #Ticker with storage
+    def __init__(self,Time_Period = 60,max_size = 10000): 
+        self._request_queue = []
+        self._max_size = max_size
+        super().__init__(Time_Period)#Broadcast inventory every timer_length seconds
+
+    def add_block_hash(self,block_hash):
+        self._request_queue.append({"Type":"Block","Payload":block_hash})
+
+    def add_tx_hash(self,tx_hash):
+        self._request_queue.append({"Type":"Transaction","Payload":tx_hash})
+
+    def get_queue(self,reset = True):
+        return_value = self._request_queue
+        if reset:
+            self.reset_queue()
+        return return_value
+
+    def reset_queue(self):
+        self._request_queue = []
+
+    def resize(self):   #If too large then purge older items
+        if len(self._request_queue) > self._max_size:
+            self._request_queue = self._request_queue[-self._maxsize:]
+        
+        
     
         
 
-def Val_Limit(Value,Max,Min):  #https://stackoverflow.com/questions/5996881/how-to-limit-a-number-to-be-within-a-specified-range-python
-    return max(min(Value,Min),Max)
+def Val_Limit(Value,Max,Min):   #https://stackoverflow.com/questions/5996881/how-to-limit-a-number-to-be-within-a-specified-range-python
+    return max(min(Value,Max),Min)
 
     
 class Main_Handler:
@@ -51,7 +87,10 @@ class Main_Handler:
         self._Mempool = Mempool_System.Mempool()  #Stores unconfirmed transactions
         self._Chain = Chain_System.Chain(self._Mempool)
 
-        self._Network_Nodes_Check_Timer = Timer(300)  #Every 300 seconds check nodes
+        self._Network_Nodes_Check_Timer = Timer(300)    #Every 300 seconds check nodes
+        self._Rebroadcaster = Rebroadcaster()
+##        self._Get_Fetch_Timer = Timer(60)               #Every 60 seconds send off all Get_ Block/Tx
+##        self._Inv_Queue = []
         print("Main_Handler started.")
 
     def Main_Loop(self):
@@ -170,14 +209,14 @@ class Main_Handler:
         for item in Message["Payload"]:
             if item["Type"] == "Block":
                 if not self._Chain.has_block(item["Payload"]):  #If not yet has block
-                    pass  #Add to request block queue
+                    pass                                        #Add to request block queue
             elif item["Type"] == "Transaction":
-                if not self._Mempool.has_tx(item["Payload"]):  #If does not currently have transaction
-                    pass #Reqiest transaction
+                if not self._Mempool.has_tx(item["Payload"]):   #If does not currently have transaction
+                    pass                                        #Reqiest transaction
 
-    def On_Get_Blocks(self,Message):
+    def On_Get_Blocks(self,Message):  #On remote needs to update chain
         Found = False
-        for block_hash in Message["Payload"]: # for each hash known to remote
+        for block_hash in Message["Payload"]:                   # for each hash known to remote
             if self._db_con.Is_Best_Chain_Block(block_hash):
                 self._SI.Inv(Message["Address"],self._db_con.Find_Best_Chain_Section(block_hash))  #Send next best hashes once found best chain connection
                 Found = True
@@ -186,23 +225,23 @@ class Main_Handler:
         if not Found: # If remote blockchain is completely broken
             self._SI.Inv(Message["Address"],self._db_con.Find_Best_Chain_Section(self._db_con.Get_Best_Chain_Block(0)[0][0])) #If broken send next hashes from genesis.
                 
-    def On_Get_Blocks_Full(self,Message):
+    def On_Get_Blocks_Full(self,Message):               #On remote node wants full blocks
         block_jsons = []
         for block_hash in Message["Payload"]:
             try:
                 block_jsons.append(self._Chain.get_block_json(block_hash))
             except:
-                print("Remote tried to request non existant block")
+                print("Remote tried to request non existant block with block hash:",block_hash)
         self._SI.Blocks(Message["Address"],block_jsons)
             
 
-    def On_Blocks(self,Message):
+    def On_Blocks(self,Message):                        #When getting the full block data
         for block_json in Message["Payload"]:
             block = Block_System.Block()
             block.import_json(block_json)
             if block.Verify(self._Time.time(),self._Chain.get_difficulty()):
-                self._Chain.add_block(block)  #Add block if it valid
-                #rebroadcast
+                self._Chain.add_block(block)            #Add block if it valid
+                self._Rebroadcaster.add_block_hash(block.Get_Block_Hash())
 
     def On_Transactions(self,Message):
         for tx_json in Message["Payload"]:
@@ -210,7 +249,7 @@ class Main_Handler:
             tx.json_import(tx_json)
             if tx.Verify():
                 self._Mempool.add_transation_json(tx.Transaction_Hash(),tx_json,tx.Verify_Values())
-                #rebroadcast            
+                self._Rebroadcaster.add_tx_hash(tx.Transaction_Hash())
                 
             
                                     
@@ -238,6 +277,14 @@ class Main_Handler:
                     self._SI.Ping(Node.Get_Address(),self._Time.time())  #Ping to keep connection alive
                 if Node.Get_Last_Contact() > 90*60:
                     self._SI.Kill_Connection(Node.Get_Address())
+
+
+    def Run_Rebroadcast(self):
+        if self._Rebroadcaster.is_go():
+            self._Rebroadcaster.reset()
+            for address in random.sample(list(self._Network_Nodes),min(8,len(self._Network_Nodes))):
+                self._SI.Inv(address,self._Rebroadcaster.get_queue(reset = False))
+            self._Rebroadcaster.reset_queue()
                     
                 
         

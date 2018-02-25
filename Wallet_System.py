@@ -22,8 +22,8 @@ class Wallet:
 ##        print(Address)
 ##        print(PrKO.to_pem().decode())
         self._Wallet[Address] = {
-            "Private_Key":base64_System.str_to_b64(PrKO.to_string(),True),
-            "Public_Key":base64_System.str_to_b64(PuKO.to_string(),True),
+            "Private_Key":base64_System.str_to_b64(PrKO.to_string()),
+            "Public_Key":base64_System.str_to_b64(PuKO.to_string()),
             }
         return Address
 
