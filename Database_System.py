@@ -32,8 +32,8 @@ class DBConnection:
         return self._cur.fetchall()
 
     def Get_Peers(self,Limit = 15):
-        self._cur.execute("SELECT * FROM Peers Limit = %s",(Limit,))
-        return self._cur.fetchall()
+        self._cur.execute("SELECT * FROM Peers")
+        return self._cur.fetchall()[0:Limit]
 
     def Remove_Peer(self,IP,Port):
         self._cur.execute("DELETE FROM Peers WHERE IP = %s AND Port = %s",(IP,Port))
@@ -126,6 +126,41 @@ class DBConnection:
     def Get_Best_Chain_Block(self,block_number):
         self._cur.execute("SELECT * FROM Blocks WHERE Block_Number = %s and On_Best_Chain = 1",(block_number,))
         return self._cur.fetchall()
+
+    def Find_Best_Known_Pattern(self,start_block_hash,linear_num = 24,max_hashs_num = 400):
+        if not self.Is_Best_Chain_Block(start_block_hash):
+            raise Exception("Start_Block_Hash must be best chain block for performance reasons")
+
+        ended= False
+        block_hashes = [start_block_hash]
+        block_hash = start_block_hash
+        for i in range(linear_num):
+            block_info = self.Get_Block(block_hash)
+            if len(block_info) == 0:
+                ended = True
+                break
+            block_hash = block_info[0][4]
+            block_hashes.append(block_hash)
+
+        if ended:
+            return block_hashes     #Reached end of known chain
+
+        step = 2
+        block_number = block_info[0][1] - step
+        while block_number > 0:
+            step*=2
+            block_info = self.Get_Best_Chain_Block(block_number)
+            if len(block_info) == 0:
+                break
+            block_hashes.append(block_info[0][4])
+            block_number = block_info[0][1]-step
+
+        return block_hashes
+            
+        
+
+        
+        
 
 ##    ##### Leaf Blocks  ######
 ##

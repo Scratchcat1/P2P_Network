@@ -151,8 +151,10 @@ def parent_set_add(db_con,hash_item,hash_set):
     return hash_item,hash_set
     
 def Generate_Genesis_Block():
+    db_con = Database_System.DBConnection()
+    db_con.ResetDatabase()
     w,t,block = Block_System.test()
-    block._db_con.ResetDatabase()
+
     print(block.Get_Block_Hash())
     c = Chain(Mempool_System.Mempool())
 
@@ -165,6 +167,7 @@ def Generate_Genesis_Block():
     rollback_data = block.Update_UTXO(c._Mempool)
     c._db_con.Set_Block_On_Best_Chain(block.Get_Block_Hash(),1)  #Mark this block as part of the best chain
     c.add_block_rollback(block.Get_Block_Hash(),rollback_data)
+    db_con.Exit()
     print("GENERATED GENESIS BLOCK\n")
 
 
@@ -172,7 +175,8 @@ def Generate_Genesis_Block():
 def sim():
     Generate_Genesis_Block()
     c = Chain(Mempool_System.Mempool())
-    b = c.get_block("c18cd9812ae9fce4c9948f66629e4b0b1e89ed56ea1fc4d26cc0091723f55e16")
+    GENESIS_BLOCK_HASH = c.get_highest_block_hash()
+    b = c.get_block(GENESIS_BLOCK_HASH)
     for n in range(1,5):
         w,t,b = Block_System.test(bn= n, tim = n,pblk = b.Get_Block_Hash())
         c.add_block(b)
@@ -181,8 +185,8 @@ def sim():
     print("")
     print("Generating side chain")
     
-    b = c.get_block("c18cd9812ae9fce4c9948f66629e4b0b1e89ed56ea1fc4d26cc0091723f55e16")
-    for n in range(1,6):
+    b = c.get_block(GENESIS_BLOCK_HASH)
+    for n in range(1,60):
         w,t,b = Block_System.test(bn= n, tim = n+100,pblk = b.Get_Block_Hash())
         c.add_block(b)
     return c

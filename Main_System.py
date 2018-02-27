@@ -23,7 +23,7 @@ class Time_Keeper:
 
 class Ticker:
     def __init__(self, Time_Period):
-        self._Time_Period
+        self._Time_Period = Time_Period
         self._Last_Call = 0
     def is_go(self):
         if time.time() >= self._Time_Period+self._Last_Call:
@@ -74,9 +74,9 @@ def Val_Limit(Value,Max,Min):   #https://stackoverflow.com/questions/5996881/how
 
     
 class Main_Handler:
-    def __init__(self,Node_Info,Max_Connections = 15,Max_SC_Messages = 100):
+    def __init__(self,Node_Info = Networking_System.Network_Node("127.0.0.1"),Max_Connections = 15,Max_SC_Messages = 100):
         print("Starting Main_Handler...")
-        self._DB = Database_System.DBConnection()
+        self._db_con = Database_System.DBConnection()
         self._Node_Info = Node_Info
         self._Max_SC_Messages = Max_SC_Messages
         self._Max_Connections = Max_Connections
@@ -87,15 +87,19 @@ class Main_Handler:
         self._Mempool = Mempool_System.Mempool()  #Stores unconfirmed transactions
         self._Chain = Chain_System.Chain(self._Mempool)
 
-        self._Network_Nodes_Check_Timer = Timer(300)    #Every 300 seconds check nodes
+        self._Network_Nodes_Check_Timer = Ticker(300)    #Every 300 seconds check nodes
+        self._Block_Sync_Timer = Ticker(300)
         self._Rebroadcaster = Rebroadcaster()
-##        self._Get_Fetch_Timer = Timer(60)               #Every 60 seconds send off all Get_ Block/Tx
-##        self._Inv_Queue = []
+
         print("Main_Handler started.")
 
     def Main_Loop(self):
         while True:
-            pass
+            self.Process_SC_Messages()
+            self.Check_Network_Nodes()
+            self.Run_Rebroadcast()
+            self.Check_Sync_Blocks()
+            time.sleep(1/60)
 
 
 
@@ -187,7 +191,7 @@ class Main_Handler:
         self._SI.Get_Peers_Response(Message["Address"],Peers)
     def On_Get_Peers_Response(self,Message):
         for peer in Message["Payload"]["Peers"]:
-            self._DB.Add_Peer(peer["IP"],peer["Port"],"",[],self._Time.time(),1,Update_If_Need = False)#Transfer peer without trust in type , flags etc
+            self._db_con.Add_Peer(peer["IP"],peer["Port"],"",[],self._Time.time(),1,Update_If_Need = False)#Transfer peer without trust in type , flags etc
             
 
     def On_Get_Address(self,Message):
@@ -270,7 +274,11 @@ class Main_Handler:
             print("Checking nodes")
             self._Network_Nodes_Check_Timer.reset()
             if len(self._Network_Nodes) < 15:
-                difference = 15-self._Network_Nodes
+                difference = 15-len(self._Network_Nodes)
+                peers = self._db_con.Get_Peers(Limit = difference)
+                for peer in peers:
+                    if (peer[0],peer[1]) not in self._Network_Nodes:    #If not already connected to node
+                        self._SI.Create_Connection((peer[0],peer[1]))   #Create connection to node
                 
             for Node in self._Network_Nodes.values():
                 if Node.Get_Last_Contact() > 20*60:
@@ -285,6 +293,15 @@ class Main_Handler:
             for address in random.sample(list(self._Network_Nodes),min(8,len(self._Network_Nodes))):
                 self._SI.Inv(address,self._Rebroadcaster.get_queue(reset = False))
             self._Rebroadcaster.reset_queue()
+
+    def Check_Sync_Blocks(self):
+        if self._Block_Sync_Timer.is_go():
+            self._Block_Sync_Timer.reset()
+            if self._db_con.Get_Highest_Work_Block()[0][5] < self._Time.time() - 24*3600:
+                print("Highest block to old, searching for new blocks")
+                for address in random.sample(list(self._Network_Nodes),min(1,len(self._Network_Nodes))):    #Single node only, randomly selected, none if no connections 
+                    known_hashes = self._db_con.Find_Best_Known_Pattern(self._Chain.get_highest_block_hash())
+                    self._SI.Get_Blocks(address,known_hashes)         
                     
                 
         

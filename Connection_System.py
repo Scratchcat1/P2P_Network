@@ -39,7 +39,7 @@ def Incoming_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,IPort = 8
         try:
             Incoming_Con, addr = ICL.accept()
             Outgoing_Con = Connect(addr[0],OPort)  #Form the sending connection
-            Return_Queue.put((addr,Outgoing_Con,Incoming_Con))  # Return the connection to the main controller
+            Return_Queue.put(((addr[0],OPort),Outgoing_Con,Incoming_Con))  # Return the connection to the main controller
 
             #Check for commands from Command_Queue
             if not Command_Queue.empty():
@@ -72,7 +72,7 @@ def Outgoing_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,IPort = 8
                     CurrentOPort = OPort
                 Outgoing_Con = Connect(Address[0],CurrentOPort)
                 Incoming_Con,addr = ICL.accept()
-                Return_Queue.put((addr,Outgoing_Con,Incoming_Con))  # Return the connection to the main controller
+                Return_Queue.put(((addr[0],CurrentOPort),Outgoing_Con,Incoming_Con))  # Return the connection to the main controller
                 
 
         except Exception as e:

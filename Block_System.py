@@ -222,12 +222,13 @@ class Block:
 
 def test(bn = 0,tim = 0,dif = 1,pblk = ""):
     import Wallet_System
+    db_con = Database_System.DBConnection()
 ##    w = Wallet_System.Wallet()
 ##    w.Load_Wallet()
     w = None
-    t = Transaction_System.Transaction()
-    b = Block(Block_Number = bn,Difficulty = dif,Prev_Block_Hash=pblk)
-    t.Add_Output(50,Transaction_System.Pay_To_Address_Script('258a4410e9d9cea10cd5efd9885422ad69b1bec8dd2c9555c37f87587a47b222'),0)
+    t = Transaction_System.Transaction(db_con = db_con)
+    b = Block(Block_Number = bn,Difficulty = dif,Prev_Block_Hash=pblk,db_con = db_con)
+    t.Add_Output(50,Transaction_System.Pay_To_Address_Script('caf78b1e6b85f812c00915dcf452f90815102b5be6cf0cf5ce4b36e162f3fe62'),0)
     t._TimeStamp = tim
 ##    print(t.Transaction_Hash())
     b.Add_Transaction(t)

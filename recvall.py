@@ -11,7 +11,7 @@
 ##    return data
 
 #CREDIT -> https://stackoverflow.com/questions/28583242/client-receiving-two-separate-message-as-one-with-python-socket
-import struct,codecs
+import struct,codecs,json
 
 def Send(con,message):
     message = codecs.encode(json.dumps(message))

@@ -343,7 +343,7 @@ def Send_Thread(Thread_Name,Command_Queue,addr,Connection,Return_Queue):
         try:
             data = Command_Queue.get()
             Command,Data = data
-            print("IS THIS OK TO SEND DATA : ",Data)
+##            print("IS THIS OK TO SEND DATA : ",Data)
             if Command == "Send":
                 recvall.Send(Connection,Data)
             elif Command == "Exit":
