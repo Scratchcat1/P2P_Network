@@ -74,14 +74,14 @@ class DBConnection:
 
     ##### Blocks ######
 
-    def Add_Block(self,Block_Hash,Block_Number,Work,Previous_Block_Hash,TimeStamp):
-        self._cur.execute("SELECT Sum_Work FROM Blocks WHERE Block_Hash = %s",(Previous_Block_Hash,))
-        Sum_Work = self._cur.fetchall()
-        if len(Sum_Work) == 0:
-            Sum_Work = 0
-        else:
-            Sum_Work = Sum_Work[0][0]
-        self._cur.execute("INSERT INTO Blocks VALUES(%s,%s,%s,%s,%s,%s,0)",(Block_Hash,Block_Number,Work,Sum_Work+Work,Previous_Block_Hash,TimeStamp))
+    def Add_Block(self,Block_Hash,Block_Number,Previous_Block_Hash,TimeStamp):
+##        self._cur.execute("SELECT Sum_Work FROM Blocks WHERE Block_Hash = %s",(Previous_Block_Hash,))
+##        Sum_Work = self._cur.fetchall()
+##        if len(Sum_Work) == 0:
+##            Sum_Work = 0
+##        else:
+##            Sum_Work = Sum_Work[0][0]
+        self._cur.execute("INSERT INTO Blocks VALUES(%s,%s,%s,%s,%s,%s,0)",(Block_Hash,Block_Number,Previous_Block_Hash,TimeStamp))
         self._db_con.commit()
 
     def Remove_Block(self,Block_Hash):
@@ -96,11 +96,11 @@ class DBConnection:
         self._cur.execute("SELECT COUNT(*) FROM Blocks WHERE Previous_Block_Hash = %s",(Previous_Block_Hash,))
         return self._cur.fetchall()
 
-    def Get_Highest_Work_Block(self):
-        self._cur.execute("SELECT MAX(Sum_Work) FROM Blocks")
-        Sum_Work = self._cur.fetchall()[0][0]
-        self._cur.execute("SELECT * FROM Blocks WHERE Sum_Work = %s ORDER BY Block_Number DESC",(Sum_Work,))
-        return self._cur.fetchall()
+##    def Get_Highest_Work_Block(self):
+##        self._cur.execute("SELECT MAX(Sum_Work) FROM Blocks")
+##        Sum_Work = self._cur.fetchall()[0][0]
+##        self._cur.execute("SELECT * FROM Blocks WHERE Sum_Work = %s ORDER BY Block_Number DESC",(Sum_Work,))
+##        return self._cur.fetchall()
 
     ####
 
@@ -125,6 +125,10 @@ class DBConnection:
 
     def Get_Best_Chain_Block(self,block_number):
         self._cur.execute("SELECT * FROM Blocks WHERE Block_Number = %s and On_Best_Chain = 1",(block_number,))
+        return self._cur.fetchall()
+
+    def Get_Highest_Best_Chain_Block(self):
+        self._cur.execute("SELECT * FROM Blocks WHERE On_Best_Chain = 1 ORDER BY Block_Number DESC")
         return self._cur.fetchall()
 
     def Find_Best_Known_Pattern(self,start_block_hash,linear_num = 24,max_hashs_num = 400):
@@ -193,7 +197,7 @@ class DBConnection:
         for item in TABLES:  # Drops all tables
             self._cur.execute("DROP TABLE IF EXISTS {0}".format(item))
         
-        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(64) PRIMARY KEY, Block_Number INT, Work INT, Sum_Work INT, Previous_Block_Hash VARCHAR(64), TimeStamp INT, On_Best_Chain INT)")
+        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(64) PRIMARY KEY, Block_Number INT, Previous_Block_Hash VARCHAR(64), TimeStamp INT, On_Best_Chain INT)")
         #self._cur.execute("CREATE TABLE Leaf_Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Sum_Work INT)")
         self._cur.execute("CREATE TABLE UTXO(Transaction_Hash VARCHAR(64) PRIMARY KEY, Transaction TEXT, Transaction_Index INT, Output INT, Block_Hash VARCHAR(64))")
         self._cur.execute("CREATE TABLE Peers(IP VARCHAR(15) ,Port INT, Type TEXT, Flags TEXT, Last_Contact INT, Last_Ping INT, PRIMARY KEY(IP,Port))")

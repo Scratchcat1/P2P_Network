@@ -1,4 +1,4 @@
-import Networking_System,Database_System,Alert_System,Chain_System,Block_System,Transaction_System,Mempool_System
+import Networking_System, Database_System, Alert_System, Chain_System, Block_System, Transaction_System, Mempool_System, Mining_System
 import random,time,numpy
 
 class Time_Keeper:
@@ -74,18 +74,22 @@ def Val_Limit(Value,Max,Min):   #https://stackoverflow.com/questions/5996881/how
 
     
 class Main_Handler:
-    def __init__(self,Node_Info = Networking_System.Network_Node("127.0.0.1"),Max_Connections = 15,Max_SC_Messages = 100):
+    def __init__(self,Node_Info = Networking_System.Network_Node("127.0.0.1"),Max_Connections = 15,Max_SC_Messages = 100, Miner = None):
         print("Starting Main_Handler...")
         self._db_con = Database_System.DBConnection()
         self._Node_Info = Node_Info
         self._Max_SC_Messages = Max_SC_Messages
         self._Max_Connections = Max_Connections
+        self._Miner = Miner
         self._SI = Networking_System.Socket_Interface(Max_Connections)
         self._Network_Nodes = {}  #Address :Network_Node
         self._Time = Time_Keeper()
 
         self._Mempool = Mempool_System.Mempool()  #Stores unconfirmed transactions
         self._Chain = Chain_System.Chain(self._Mempool)
+        if self._Miner:
+            self._Miner.set_mempool(self._Mempool)
+            self.Reset_Miner()
 
         self._Network_Nodes_Check_Timer = Ticker(300)    #Every 300 seconds check nodes
         self._Block_Sync_Timer = Ticker(300)
@@ -99,6 +103,7 @@ class Main_Handler:
             self.Check_Network_Nodes()
             self.Run_Rebroadcast()
             self.Check_Sync_Blocks()
+            self.Check_Miner()
             time.sleep(1/60)
 
 
@@ -243,9 +248,12 @@ class Main_Handler:
         for block_json in Message["Payload"]:
             block = Block_System.Block()
             block.import_json(block_json)
+            
             if block.Verify(self._Time.time(),self._Chain.get_difficulty()):
                 self._Chain.add_block(block)            #Add block if it valid
                 self._Rebroadcaster.add_block_hash(block.Get_Block_Hash())
+                if self._Chain.get_highest_block() == block.Get_Block_Hash():   #If this is the highest block
+                    self.Restart_Miner()                #Restart the miner if need be.
 
     def On_Transactions(self,Message):
         for tx_json in Message["Payload"]:
@@ -297,13 +305,25 @@ class Main_Handler:
     def Check_Sync_Blocks(self):
         if self._Block_Sync_Timer.is_go():
             self._Block_Sync_Timer.reset()
-            if self._db_con.Get_Highest_Work_Block()[0][5] < self._Time.time() - 24*3600:
+            if self._db_con.Get_Highest_Best_Chain_Block()[0][3] < self._Time.time() - 24*3600:
                 print("Highest block to old, searching for new blocks")
                 for address in random.sample(list(self._Network_Nodes),min(1,len(self._Network_Nodes))):    #Single node only, randomly selected, none if no connections 
                     known_hashes = self._db_con.Find_Best_Known_Pattern(self._Chain.get_highest_block_hash())
-                    self._SI.Get_Blocks(address,known_hashes)         
+                    self._SI.Get_Blocks(address,known_hashes)
+
+    def Check_Miner(self):
+        if self._Miner:
+            if self._Miner.has_found_block():
+                block = self._Miner.get_block()
+                internal_block_message = {"Command":"Blocks",
+                                          "Address":("127.0.0.1",None),
+                                          "Payload":[block.export_json()]}  #Includes generic address for localhost in case one wants to check if one created the block
+                self.On_Blocks(internal_block_message)           #Add block to chain normally. This also restarts the miner
                     
-                
+    def Reset_Miner(self):
+        if self._Miner:
+            block = self._db_con.Get_Block(self._Chain.get_highest_work_block())
+            self._Miner.restart_mine(self._Time.time(),self._Chain.get_difficulty(),block.Get_Block_Number()+1,block.Get_Block_Hash())  #Start mining on the highest block.
         
         
         
@@ -313,7 +333,10 @@ class Main_Handler:
 
 
 
-
+def Miner_Run():
+    miner = Mining_System.Miner(None,Block_System.coinbase_tx(0),2)
+    m = Main_Handler(Miner = miner)
+    m.Main_Loop()
 
 
 

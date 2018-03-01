@@ -45,6 +45,8 @@ class Block:
 
     def Set_TimeStamp(self,TimeStamp):
         self._TimeStamp = TimeStamp
+    def Set_Block_Hash(self,block_hash):
+        self._Block_Hash = block_hash
 
     def Get_Block_Hash(self):
         return self._Block_Hash
@@ -127,6 +129,7 @@ class Block:
     def Verify_Block_Hash(self):
         json_source = self.Get_Raw_Hash_Source()
         hash_value = hashlib.sha256(json_source.encode()).hexdigest()
+        print(hash_value)
         if not (hash_value == self._Block_Hash and int(hash_value,16) < 2**256 - self._Difficulty):
             raise Exception("Invalid block hash value")
 
@@ -157,7 +160,8 @@ class Block:
             self.Verify_Merkle_Root()
             self.Verify_Transactions()
             return True
-        except:
+        except Exception as e:
+            print(e)
             return False
 
     ###############################################
@@ -228,11 +232,9 @@ def test(bn = 0,tim = 0,dif = 1,pblk = ""):
 ##    w = Wallet_System.Wallet()
 ##    w.Load_Wallet()
     w = None
-    t = Transaction_System.Transaction(db_con = db_con)
     b = Block(Block_Number = bn,Difficulty = dif,Prev_Block_Hash=pblk,db_con = db_con)
-    t.Add_Output(50,Transaction_System.Pay_To_Address_Script('caf78b1e6b85f812c00915dcf452f90815102b5be6cf0cf5ce4b36e162f3fe62'),0)
-    t._TimeStamp = tim
 ##    print(t.Transaction_Hash())
+    t = coinbase_tx(tim)
     b.Add_Transaction(t)
     b.Set_TimeStamp(tim)
 ##    print(t.Is_Coinbase())
@@ -242,7 +244,8 @@ def test(bn = 0,tim = 0,dif = 1,pblk = ""):
     return w,t,b
     
     
-
-
-    
-        
+def coinbase_tx(tim):
+    t = Transaction_System.Transaction()
+    t.Add_Output(50,Transaction_System.Pay_To_Address_Script('caf78b1e6b85f812c00915dcf452f90815102b5be6cf0cf5ce4b36e162f3fe62'),0)
+    t.Set_TimeStamp(tim)
+    return t

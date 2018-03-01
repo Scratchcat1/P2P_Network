@@ -28,7 +28,7 @@ class Chain:
             file_handle.write(block_json)
 
     def add_block(self,block):
-        self._db_con.Add_Block(block.Get_Block_Hash(),block.Get_Block_Number(),block.Get_Difficulty(),block.Get_Prev_Block_Hash(),block.Get_TimeStamp()) #Add block to db
+        self._db_con.Add_Block(block.Get_Block_Hash(),block.Get_Block_Number(),block.Get_Prev_Block_Hash(),block.Get_TimeStamp()) #Add block to db
         self.add_block_json(block.Get_Block_Hash(),json.dumps(block.Export()))   #Save block
         if self.check_for_rebase(block.Get_Block_Hash(),block.Get_Prev_Block_Hash()):
             self.rebase_chain(block.Get_Block_Hash())
@@ -56,7 +56,7 @@ class Chain:
     #############################################
         
     def get_highest_block_hash(self):
-        return self._db_con.Get_Highest_Work_Block()[0][0]
+        return self._db_con.Get_Highest_Best_Chain_Block()[0][0]
 
     def has_block(self,block_hash):  #To tell if one has the block or not
         return len(self._db_con.Get_Block(block_hash)) != 0  # If not 0 then has block
@@ -79,7 +79,7 @@ class Chain:
             block = self.get_block(current_hash)
             block.Rollback_UTXO(self.get_block_rollback(current_hash),self._Mempool)  #readd any UTXOs and remove new outputs, readds transactions to mempool
             self._db_con.Set_Block_On_Best_Chain(block.Get_Block_Hash(),0)            #Mark this block as not on the best chain any longer
-            current_hash = self._db_con.Get_Block(current_hash)[0][4]                  # Move to parent block
+            current_hash = self._db_con.Get_Block(current_hash)[0][2]                  # Move to parent block
 
         for current_hash in self.find_path_to_block(new_block_hash,common_root)[::-1]: # for new chain ( method returns new->old) add in utxos
             block = self.get_block(current_hash)
@@ -100,7 +100,7 @@ class Chain:
     def find_path_to_block(self,current_block_hash,target_block_hash):
         path = []
         while current_block_hash != target_block_hash:
-            current_block_hash = self._db_con.Get_Block(current_block_hash)[0][4]
+            current_block_hash = self._db_con.Get_Block(current_block_hash)[0][2]
             path.append(current_block_hash)
         return path[:-1]  #This removes the target_block_hash from the list
 
@@ -119,25 +119,25 @@ class Chain:
             if len(block_info) == 0:
                 break  # No more blocks found to cancel
             block_number = block_info[0][1]
-            current_hash = block_info[0][4]  # next hash
+            current_hash = block_info[0][2]  # next hash
             
-        for x in range(2016):   #Attempts to get 2016 blocks
+        for x in range(2016):   #Attempts to get 2016 blocks   THIS GOES FROM 2016n to 2016(n-1)!
             block_info = self._db_con.Get_Block(current_hash)
             if len(block_info) == 0:
                 break  # No more blocks found to cancel
             blocks.append(block_info[0])
-            current_hash = block_info[0][4]  # next hash
+            current_hash = block_info[0][2]  # next hash
 
         sum_diff = 0
         for block_info in blocks:
             sum_diff += block_info[2]
             
-##        print( blocks[0][5],blocks[-1][5])
-        if len(blocks) > 0 and blocks[0][5] != blocks[-1][5]:
-            diff = (2*7*24*3600)/(max(blocks[0][5],blocks[-1][5])-min(blocks[0][5],blocks[-1][5])) * sum_diff/len(blocks)   # TargetTime/actualTime * current difficulty, if T < a difficulty is reduced
+##        print( blocks[0][3],blocks[-1][3])
+        if len(blocks) > 0 and blocks[0][3] != blocks[-1][3]:
+            diff = (2*7*24*3600)/(max(blocks[0][3],blocks[-1][3])-min(blocks[0][3],blocks[-1][3])) * sum_diff/len(blocks)   # TargetTime/actualTime * current difficulty, if T < a difficulty is reduced
         else:
             print("Using default difficulty")
-            diff = 2**256 - 2**250  #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
+            diff = 2**256 - 2**240  #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
 
         return diff
             
@@ -146,7 +146,7 @@ class Chain:
 def parent_set_add(db_con,hash_item,hash_set):
     hash_item = db_con.Get_Block(hash_item)
     if len(hash_item) > 0:
-        hash_item = hash_item[0][4] #prev block hash
+        hash_item = hash_item[0][2] #prev block hash
         hash_set.add(hash_item)
     return hash_item,hash_set
     
@@ -159,7 +159,7 @@ def Generate_Genesis_Block():
     c = Chain(Mempool_System.Mempool())
 
     #Add genesis block to db and save file
-    c._db_con.Add_Block(block.Get_Block_Hash(),block.Get_Block_Number(),block.Get_Difficulty(),block.Get_Prev_Block_Hash(),block.Get_TimeStamp()) #Add block to db
+    c._db_con.Add_Block(block.Get_Block_Hash(),block.Get_Block_Number(),block.Get_Prev_Block_Hash(),block.Get_TimeStamp()) #Add block to db
     c.add_block_json(block.Get_Block_Hash(),json.dumps(block.Export()))   #Save block
 
     #No rebase as first block
