@@ -2,7 +2,7 @@ import MySQLdb as sql
 
 class DBConnection:
     def __init__(self):
-        print("Initializing database connection ")
+##        print("Initializing database connection ")
         self._db_con = sql.connect("localhost","P2P_Network_DB","ll82yq75bv93q","P2P_Network_Database")
         self._cur = self._db_con.cursor()
         self._cur_header = self._db_con.cursor()
@@ -80,8 +80,8 @@ class DBConnection:
         if len(Sum_Work) == 0:
             Sum_Work = 0
         else:
-            Sum_Work = Sum_Work[0][0]
-        self._cur.execute("INSERT INTO Blocks VALUES(%s,%s,%s,%s,%s,%s,0)",(Block_Hash,Block_Number,Work,Sum_Work+Work,Previous_Block_Hash,TimeStamp))
+            Sum_Work = int(Sum_Work[0][0])
+        self._cur.execute("INSERT INTO Blocks VALUES(%s,%s,%s,%s,%s,%s,0)",(Block_Hash,Block_Number,str(Work).zfill(100),str(Sum_Work+Work).zfill(100),Previous_Block_Hash,TimeStamp))
         self._db_con.commit()
 
     def Remove_Block(self,Block_Hash):
@@ -97,9 +97,10 @@ class DBConnection:
         return self._cur.fetchall()
 
     def Get_Highest_Work_Block(self):
-        self._cur.execute("SELECT MAX(Sum_Work) FROM Blocks")
-        Sum_Work = self._cur.fetchall()[0][0]
+        self._cur.execute("SELECT Sum_Work FROM Blocks")
+        Sum_Work = max(self._cur.fetchall())[0]
         self._cur.execute("SELECT * FROM Blocks WHERE Sum_Work = %s ORDER BY Block_Number DESC",(Sum_Work,))
+        self._db_con.commit()
         return self._cur.fetchall()
 
     ####
@@ -193,7 +194,7 @@ class DBConnection:
         for item in TABLES:  # Drops all tables
             self._cur.execute("DROP TABLE IF EXISTS {0}".format(item))
         
-        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(64) PRIMARY KEY, Block_Number INT, Work INT, Sum_Work INT, Previous_Block_Hash VARCHAR(64), TimeStamp INT, On_Best_Chain INT)")
+        self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(64) PRIMARY KEY, Block_Number INT, Work VARCHAR(100), Sum_Work VARCHAR(100), Previous_Block_Hash VARCHAR(64), TimeStamp INT, On_Best_Chain INT)")
         #self._cur.execute("CREATE TABLE Leaf_Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Sum_Work INT)")
         self._cur.execute("CREATE TABLE UTXO(Transaction_Hash VARCHAR(64) PRIMARY KEY, Transaction TEXT, Transaction_Index INT, Output INT, Block_Hash VARCHAR(64))")
         self._cur.execute("CREATE TABLE Peers(IP VARCHAR(15) ,Port INT, Type TEXT, Flags TEXT, Last_Contact INT, Last_Ping INT, PRIMARY KEY(IP,Port))")

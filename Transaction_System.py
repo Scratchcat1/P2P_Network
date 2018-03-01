@@ -29,6 +29,9 @@ class Transaction:
 
     #############################################
 
+    def Set_TimeStamp(self,Time):
+        self._TimeStamp = Time
+
     def Get_Inputs(self):
         return self._in
     def Get_Outputs(self):

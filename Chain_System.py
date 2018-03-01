@@ -121,7 +121,7 @@ class Chain:
             block_number = block_info[0][1]
             current_hash = block_info[0][4]  # next hash
             
-        for x in range(2016):   #Attempts to get 2016 blocks
+        for x in range(2016):   #Attempts to get 2016 blocks   THIS GOES FROM 2016n to 2016(n-1)!
             block_info = self._db_con.Get_Block(current_hash)
             if len(block_info) == 0:
                 break  # No more blocks found to cancel
@@ -130,14 +130,14 @@ class Chain:
 
         sum_diff = 0
         for block_info in blocks:
-            sum_diff += block_info[2]
+            sum_diff += int(block_info[2])
             
 ##        print( blocks[0][5],blocks[-1][5])
         if len(blocks) > 0 and blocks[0][5] != blocks[-1][5]:
             diff = (2*7*24*3600)/(max(blocks[0][5],blocks[-1][5])-min(blocks[0][5],blocks[-1][5])) * sum_diff/len(blocks)   # TargetTime/actualTime * current difficulty, if T < a difficulty is reduced
         else:
             print("Using default difficulty")
-            diff = 2**256 - 2**250  #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
+            diff = 2**256 - 2**240  #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
 
         return diff
             

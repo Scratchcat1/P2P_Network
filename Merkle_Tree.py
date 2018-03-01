@@ -2,7 +2,7 @@ import hashlib,copy
 
 class Merkle_Tree:
     def __init__(self):
-        print("Created merkle tree")
+##        print("Created merkle tree")
         self._contents = []
 
     def Add_Hash(self,new_hash):
@@ -27,7 +27,7 @@ class Merkle_Tree:
         path_values =[]
         for layer in Layers:
             parent = layer[new_index]
-            print(hash_value,parent._ChildA,parent._ChildB)
+##            print(hash_value,parent._ChildA,parent._ChildB)
             path_values.append(parent.Find_Alternate(hash_value))
             hash_value = parent.Get_Hash()
             new_index = Calculate_Next_Index(Find_Hash_Item_Index(Extend_List(layer),hash_value))
@@ -45,7 +45,6 @@ class Merkle_Tree:
             else:
                 current = current+item[1]
             current = hashlib.sha256(current.encode()).hexdigest()
-            print(current)
         return current
             
 

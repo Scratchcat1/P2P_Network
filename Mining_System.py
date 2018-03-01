@@ -1,44 +1,69 @@
-import Block_System,Threading_System,queue,time
+import Block_System,Threading_System,queue,time,multiprocessing
 
 class Miner:
-    def __init__(self,mempool, num_proc = 3):
-        self._mempool = mempool
+    def __init__(self,mempool,coinbase_tx, num_proc = 3):
+        self._mempool = mempool             #Mempool can be added later
+        self._coinbase_tx = coinbase_tx     #Stores the target coinbase_tx
         self._num_proc = num_proc
-
+        THREAD_MODE = "Create_Process"
+    
         self._TC_queue = Threading_System.Create_Controller()
-        self._hash_queue = queue.Queue()
+        self._json_queue = queue.Queue() if THREAD_MODE == "Create_Thread" else multiprocessing.Queue()
 
         for i in range(num_proc):
-            self._TC_queue.put(("Controller","Create_Process",(i,Miner_Worker,(self._num_proc,self._hash_queue,))))
+            self._TC_queue.put(("Controller",THREAD_MODE,(i,Miner_Worker,(self._num_proc,self._json_queue,))))
+
+    ##############################################################
+
+    def set_mempool(self,mempool):
+        self._mempool = mempool
+
+    def set_coinbase_tx(self,ctx):
+        self._coinbase_tx = ctx
 
 
+    ##############################################################
 
 
+    def restart_mine(self,Time,difficulty,block_number,parent_block_hash):
+        transactions = self._mempool.get_txs()          #Obtain the txs to include
+        block = Block_System.Block(difficulty,block_number,parent_block_hash)
+        block.Set_TimeStamp(Time)                       #Set the correct timestamps
+        self._coinbase_tx.Set_TimeStamp(Time)
+        block.Add_Transaction(self._coinbase_tx)        #Add the coinbase transaction
+        for tx in transactions:
+            block.Add_Transaction(tx)
 
-
-
-
-
-
-    def close(self):
-        self._TC_queue.put(("Controller","Exit",()))
-
-    def start_mine(self,block_json):
-        for i in range(self._num_proc):
-            self._TC_queue.put((i,"Mine",(block_json,)))
+        block.Set_Merkle_Root(block.Calculate_Merkle_Root())
+        self.mine_block_json(block.export_json())
+        
 
     def halt(self):
         for i in range(self._num_proc):
-            self._TC_queue.put((i,"Halt",()))
+            self._TC_queue.put((i,"Halt",()))           #Pause all mining
+    
 
-    def has_block_hash(self):
-        return not self._hash_queue.empty()
+    def mine_block_json(self,block_json):
+        for i in range(self._num_proc):
+            self._TC_queue.put((i,"Mine",(block_json,)))    #Mine this block json
 
-    def get_block_hash(self):
-        block_hash = self._hash_queue.get()
-        while not self._hash_queue.empty():
-            _= self._hash_queue.get()       #Empty queue to avoid more solutions backing up
-        return block_hash
+    def has_found_block(self):
+        return not self._json_queue.empty()             #Detects if mining complete.
+
+    def get_block(self):
+        block_json = self._json_queue.get()
+        while not self._json_queue.empty():
+            _= self._json_queue.get()       #Empty queue to avoid more solutions backing up
+
+        
+        block = Block_System.Block()
+        block.import_json(block_json)
+        self._current_block = None
+        return block
+
+    ####################################################
+    def close(self):
+        self._TC_queue.put(("Controller","Exit",()))
 
 
 
@@ -50,7 +75,8 @@ class Miner:
 
 
 
-def Miner_Worker(Thread_Name,Thread_Queue,num_proc,hash_queue):
+
+def Miner_Worker(Thread_Name,Thread_Queue,num_proc,json_queue):
     """
     Commands in form (command,(arg1,arg2...))
     (Exit,()) -> Exit
@@ -73,6 +99,7 @@ def Miner_Worker(Thread_Name,Thread_Queue,num_proc,hash_queue):
 
                 elif Command == "Mine":
                     block.import_json(Args[0])
+##                    print("MINER",block.Get_Prev_Block_Hash())
                     block.Set_TimeStamp(block.Get_TimeStamp()+Thread_Name)  #Staggers the timestamps over the range of the procs so no duplicate work is done
                     current_json = block.export_json()
                     
@@ -80,7 +107,7 @@ def Miner_Worker(Thread_Name,Thread_Queue,num_proc,hash_queue):
                 block.import_json(current_json)
                 block_hash = block.Mine()
                 if block_hash:
-                    hash_queue.put(block_hash)
+                    json_queue.put(block.export_json())
                     current_json = None
                 else:
                     block.Set_TimeStamp(block.Get_TimeStamp()+num_proc)
@@ -93,4 +120,3 @@ def Miner_Worker(Thread_Name,Thread_Queue,num_proc,hash_queue):
             time.sleep(0.1)
                 
                     
-

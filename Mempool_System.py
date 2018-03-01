@@ -18,6 +18,23 @@ class Mempool:
             tx.Import(tx_json)
             if tx.Get_Fee() >= self._min_fee:
                 self._contents[tx_hash] = tx_json
+
+    def get_txs(self,num = 100):  #returns top 100 fee transactions
+        tx_fees = {}
+        for tx_hash,tx_json in self._contents.items():
+            tx = Tranaction_System.Transaction()
+            tx.Import(tx_json)
+            tx_fees[tx_hash] = tx.Get_Fee()
+            
+        tx_hashes = sorted(self._contents,key = lambda x:tx_fees[x])
+        txs = []
+        for item in tx_hashes:
+            tx = Tranaction_System.Transaction()
+            tx.Import(self._contents[item])
+            txs.append(tx)
+        return txs
+            
+        
     
 
     def get_min_fee(self):
