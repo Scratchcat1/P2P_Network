@@ -40,6 +40,9 @@ class Block:
             "TimeStamp":self._TimeStamp,
             "Nonce":self._Nonce,}
 
+    def export_json(self):
+        return json.dumps(self.Export())
+
     def Set_TimeStamp(self,TimeStamp):
         self._TimeStamp = TimeStamp
 
@@ -158,15 +161,14 @@ class Block:
             return False
 
     ###############################################
-
     def Mine(self, iterations = 100000):
+        raw_hash_source = json.loads(self.Get_Raw_Hash_Source())
         for i in range(iterations):
-            self._Nonce = i
-            raw_hash_source = self.Get_Raw_Hash_Source()
-##            raw_hash_source["Nonce"] = i
-            block_hash = hashlib.sha256(raw_hash_source.encode()).hexdigest()
+            raw_hash_source["Nonce"] = i
+            block_hash = hashlib.sha256(json.dumps(raw_hash_source,sort_keys = True).encode()).hexdigest()
             if int(block_hash,16) < 2**256 - self._Difficulty:
                 print("Found block hash:",block_hash,"after",i,"iterations")
+                self._Nonce = i
                 self._Block_Hash = block_hash
                 return block_hash
             
