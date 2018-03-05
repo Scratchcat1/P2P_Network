@@ -10,7 +10,7 @@ def Create_Socket_Controller(Thread_Name,Command_Queue,Output_Queue,Max_Connecti
 
 class Socket_Controller(Threading_System.Thread_Controller):
     _Name = ""
-    def __init__(self,Thread_Name,Command_Queue,Output_Queue,Max_Connections=15):
+    def __init__(self,Thread_Name,Command_Queue,Output_Queue,Max_Connections=15,TPort = 8000):
         self._Thread_Name = "TC"+Thread_Name+">"
         self._Command_Queue = Command_Queue
         self._Output_Queue = Output_Queue
@@ -21,8 +21,8 @@ class Socket_Controller(Threading_System.Thread_Controller):
         self._Addresses = set()
 
     
-        self.Create_Thread("Incoming_Con",TargetCommand = Connection_System.Incoming_Connection_Handler,TargetArgs = (self._Return_Queues["I"],))
-        self.Create_Thread("Outgoing_Con",TargetCommand = Connection_System.Outgoing_Connection_Handler,TargetArgs = (self._Return_Queues["O"],))
+        self.Create_Thread("Incoming_Con",TargetCommand = Connection_System.Incoming_Connection_Handler,TargetArgs = (self._Return_Queues["I"],TPort))
+        self.Create_Thread("Outgoing_Con",TargetCommand = Connection_System.Outgoing_Connection_Handler,TargetArgs = (self._Return_Queues["O"],TPort))
 
     def Add_Return_Queue(self,Address,Mode):
         return_queue = queue.Queue()
@@ -70,12 +70,12 @@ class Socket_Controller(Threading_System.Thread_Controller):
             return_queue = self._Return_Queues[letter]
             while not return_queue.empty():
                 data = return_queue.get()      #Gets a new connection object
-                addr,Outgoing_Con,Incoming_Con = data
+                addr,conn = data
 
                 self._Addresses.add(addr)
                 O_Return_Queue,I_Return_Queue = self.Add_Return_Queue(addr,"S"),self.Add_Return_Queue(addr,"R")
-                self.Create_Thread(addr+("S",),TargetCommand = Send_Thread,TargetArgs = (addr,Outgoing_Con,O_Return_Queue))
-                self.Create_Thread(addr+("R",),TargetCommand = Recv_Thread,TargetArgs = (addr,Incoming_Con,I_Return_Queue))
+                self.Create_Thread(addr+("S",),TargetCommand = Send_Thread,TargetArgs = (addr,conn,O_Return_Queue))
+                self.Create_Thread(addr+("R",),TargetCommand = Recv_Thread,TargetArgs = (addr,conn,I_Return_Queue))
                 self.Return_New_Connection(addr)
                 
 
@@ -127,10 +127,10 @@ class Socket_Controller(Threading_System.Thread_Controller):
 
 
 class Basic_Socket_Interface:
-    def __init__(self,Max_Connections = 15):
+    def __init__(self,Max_Connections = 15,TPort = 8000):
         self._SC_Out_Queue = queue.Queue()
         self._Command_Queue = Threading_System.Create_Controller()
-        self._Command_Queue.put(("Controller","Create_Thread",("SC",Create_Socket_Controller,(self._SC_Out_Queue,Max_Connections))))
+        self._Command_Queue.put(("Controller","Create_Thread",("SC",Create_Socket_Controller,(self._SC_Out_Queue,Max_Connections,TPort))))
 
     def Kill_Connection(self,Address):
         self._Command_Queue.put(("SC","Controller","Kill_Connection",(Address,)))
@@ -159,7 +159,7 @@ class Basic_Socket_Interface:
     def Get_Output_Queue(self):
         return self._SC_Out_Queue
 
-class Socket_Interface(Basic_Socket_Interface):
+class Socket_Interface_Extender:
     def Ping(self,Address,Time):  #Used to ping a node
         Ping_Message = {"Command":"Ping",
                        "Payload":{"Time_Sent":Time}}
@@ -264,6 +264,10 @@ class Socket_Interface(Basic_Socket_Interface):
         Transactions_Message = {"Command":"Transactions",
                                 "Payload":Transactions_List}
         self.Send(Address,Transactions_Message)
+
+class Socket_Interface(Basic_Socket_Interface,Socket_Interface_Extender):
+    def __binder(self):     #Used to form the new class
+        pass            
 
         
 def Make_Inv_Item(Type,Payload):

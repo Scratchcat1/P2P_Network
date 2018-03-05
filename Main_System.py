@@ -81,9 +81,12 @@ class Main_Handler:
         self._Max_SC_Messages = Max_SC_Messages
         self._Max_Connections = Max_Connections
         self._Miner = Miner
+        self._UMCs = {}  #UMC_Node lists list
+        self._UMC_SI = Networking_System.Socket_Interface(TPort = 9000)
         self._SI = Networking_System.Socket_Interface(Max_Connections)
         self._Network_Nodes = {}  #Address :Network_Node
         self._Time = Time_Keeper()
+        
 
         self._Mempool = Mempool_System.Mempool()  #Stores unconfirmed transactions
         self._Chain = Chain_System.Chain(self._Mempool)
@@ -95,10 +98,44 @@ class Main_Handler:
         self._Block_Sync_Timer = Ticker(300)
         self._Rebroadcaster = Rebroadcaster()
 
+
+
+        self._Node_Commands = {
+            "Peer_Connected":self.On_Peer_Connected,
+            "Peer_Disconnected":self.On_Peer_Disconnected,
+            "Ping":self.On_Ping,
+            "Ping_Response":self.On_Ping_Response,
+            "Get_Node_Info":self.On_Get_Node_Info,
+            "Node_Info":self.On_Node_Info,
+            "Time_Sync":self.On_Time_Sync,
+            "Time_Sync_Response":self.On_Time_Sync_Response,
+            "Alert":self.On_Alert,
+            "Exit":self.On_Exit,
+            "Exit_Response":self.On_Exit_Response,
+            "Get_Peers":self.On_Get_Peers,
+            "Get_Peers_Response":self.On_Get_Peers_Response,
+            "Get_Address":self.On_Get_Address,
+            "Get_Address_Response":self.On_Get_Address_Response,
+
+            
+            "Inv":self.On_Inv,
+            "Get_Blocks":self.On_Get_Blocks,
+            "Get_Blocks_Full":self.On_Get_Blocks_Full,
+            "Blocks":self.On_Blocks,
+            "Transactions":self.On_Transactions,
+                }
+        self._UMC_Commands = {
+            "Peer_Connected":self.On_UMC_Connected,
+            "Peer_Disconnected":self.On_UMC_Disconnected,
+            "Shutdown":self.On_UMC_Shutdown,
+            "Connect":self.On_UMC_Connect,
+            "Disconnect":self.On_UMC_Disconnect,
+                }
         print("Main_Handler started.")
 
     def Main_Loop(self):
-        while True:
+        self._Exit = False
+        while not self._Exit:
             self.Process_SC_Messages()
             self.Check_Network_Nodes()
             self.Run_Rebroadcast()
@@ -110,39 +147,17 @@ class Main_Handler:
 
     def Process_SC_Messages(self):
         Processed_Message_Number = 0
-        while not self._SI.Output_Queue_Empty() and Processed_Message_Number < Max_SC_Messages:
+        while not self._SI.Output_Queue_Empty() and Processed_Message_Number < self._Max_SC_Messages:
             message = self._SI.Get_Item()
-            Commands = {
-                "Peer_Connected":self.On_Peer_Connected,
-                "Peer_Disconnected":self.On_Peer_Disconnected,
-                "Ping":self.On_Ping,
-                "Ping_Response":self.On_Ping_Response,
-                "Get_Node_Info":self.On_Get_Node_Info,
-                "Node_Info":self.On_Node_Info,
-                "Time_Sync":self.On_Time_Sync,
-                "Time_Sync_Response":self.On_Time_Sync_Response,
-                "Alert":self.On_Alert,
-                "Exit":self.On_Exit,
-                "Exit_Response":self.On_Exit_Response,
-                "Get_Peers":self.On_Get_Peers,
-                "Get_Peers_Response":self.On_Get_Peers_Response,
-                "Get_Address":self.On_Get_Address,
-                "Get_Address_Response":self.On_Get_Address_Response,
 
-                
-                "Inv":self.On_Inv,
-                "Get_Blocks":self.On_Get_Blocks,
-                "Get_Blocks_Full":self.On_Get_Blocks_Full,
-                "Blocks":self.On_Blocks,
-                "Transactions":self.On_Transactions,
-                    }
-
-            if message["Command"] in Commands:
-                Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
+            if message["Command"] in self._Node_Commands:
+                self._Node_Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
             if message["Address"] in self._Network_Nodes:
                 self._Network_Nodes[message["Address"]].Set_Last_Contact(self._Time.time())  #Mark as last contact
 
+            Processed_Message_Number +=1
 
+            
     ################################
     #                              #
     #    Below is misc/maintanace  #
@@ -273,10 +288,9 @@ class Main_Handler:
 
 
     #####################################################################
-
-
-    def Spawn_Events(self):
-        pass
+             
+                
+            
 
     def Check_Network_Nodes(self):
         if self._Network_Nodes_Check_Timer.is_go():
@@ -329,7 +343,44 @@ class Main_Handler:
             self._Miner.restart_mine(self._Time.time(),self._Chain.get_difficulty(),block_info[0][1]+1,block_info[0][0])  #Start mining on the highest block.
         
         
+    #######################################################################
+
+    #################################
+    #                               #
+    #  UserMainConnection commands  #
+    #                               #
+    #################################
+
+    def UMC_Check(self):
+        while not self._UMC_SI.Output_Queue_Empty():            
+            message = self._UMC_SI.Get_Item()
+            
+
+            if message["Command"] in self._UMC_Commands:
+                self._UMC_Commands[message["Command"]](message)
+            elif message["Command"] in self._Node_Commands:
+                self._Node_Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
+
+
+
+    def On_UMC_Shutdown(self,message):
+        self._Exit = True
+        print("MAIN HANDLER IS SHUTTING DOWN")
+
+    def On_UMC_Connect(self,message):
+        self._SI.Create_Connection(message["Payload"]["Address"])
+
+    def On_UMC_Disconnect(self,message):
+        self._SI.Create_Connection(message["Payload"]["Address"])
         
+    def On_UMC_Connected(self,Message):
+        self._UMCs[Message["Payload"]["Address"]] = UI_Main_Connection.U_Node(Message["Payload"]["Address"])
+    def On_UMC_Disconnected(self,Message):
+        self._UMCs.pop(Message["Payload"]["Address"],None)
+
+
+
+    #####################################################################
         
         
         

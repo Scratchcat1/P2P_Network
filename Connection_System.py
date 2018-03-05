@@ -32,14 +32,15 @@ class Incoming_Connection_Listener:
         
 
 #OPort -> Outgoing connection port, IPort -> Incoming connection port.
-def Incoming_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,IPort = 8000,OPort = 8001):
+def Incoming_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,TPort = 8000):
     Exit = False
-    ICL = Incoming_Connection_Listener(IPort,"ICH Listener")
+    ICL = Incoming_Connection_Listener(TPort,"ICH Listener")
     while not Exit:
         try:
             Incoming_Con, addr = ICL.accept()
-            Outgoing_Con = Connect(addr[0],OPort)  #Form the sending connection
-            Return_Queue.put(((addr[0],OPort),Outgoing_Con,Incoming_Con))  # Return the connection to the main controller
+##            Outgoing_Con = Connect(addr[0],OPort)  #Form the sending connection
+##            Return_Queue.put(((addr[0],OPort),Outgoing_Con,Incoming_Con))
+            Return_Queue.put(((addr[0],TPort),Incoming_Con))  # Return the connection to the main controller
 
             #Check for commands from Command_Queue
             if not Command_Queue.empty():
@@ -54,9 +55,9 @@ def Incoming_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,IPort = 8
 
 
 
-def Outgoing_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,IPort = 8001,OPort = 8000):
+def Outgoing_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,TPort = 8000):
     Exit = False
-    ICL = Incoming_Connection_Listener(IPort,"OCH Listener")
+##    ICL = Incoming_Connection_Listener(IPort,"OCH Listener")
     while not Exit:
         try:
             data = Command_Queue.get()
@@ -67,12 +68,13 @@ def Outgoing_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,IPort = 8
                 print(Arguments)
                 Address = Arguments
                 if type(Address[1]) == int:
-                    CurrentOPort = Address[1]
+                    CurrentTPort = Address[1]
                 else:
-                    CurrentOPort = OPort
-                Outgoing_Con = Connect(Address[0],CurrentOPort)
-                Incoming_Con,addr = ICL.accept()
-                Return_Queue.put(((addr[0],CurrentOPort),Outgoing_Con,Incoming_Con))  # Return the connection to the main controller
+                    CurrentTPort = TPort
+                Outgoing_Con = Connect(Address[0],CurrentTPort)
+##                Incoming_Con,addr = ICL.accept()
+##                Return_Queue.put(((addr[0],CurrentOPort),Outgoing_Con,Incoming_Con))
+                Return_Queue.put(((addr[0],CurrentTPort),Outgoing_Con))  # Return the connection to the main controller
                 
 
         except Exception as e:
