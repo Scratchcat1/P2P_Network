@@ -71,6 +71,12 @@ class DBConnection:
         self._db_con.commit()
         return transaction
 
+    def Get_UTXOs_Match(self,Address_List):
+        self._cur.execute("SELECT * FROM UTXO")
+        UTXOs = self._cur.fetchall()
+        UTXOs = list(filter(lambda x:match_str_list(x[1],Address_List),UTXOs))
+        return UTXOs
+
 
     ##### Blocks ######
 
@@ -196,9 +202,16 @@ class DBConnection:
         
         self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(64) PRIMARY KEY, Block_Number INT, Work VARCHAR(100), Sum_Work VARCHAR(100), Previous_Block_Hash VARCHAR(64), TimeStamp INT, On_Best_Chain INT)")
         #self._cur.execute("CREATE TABLE Leaf_Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Sum_Work INT)")
-        self._cur.execute("CREATE TABLE UTXO(Transaction_Hash VARCHAR(64) PRIMARY KEY, Transaction TEXT, Transaction_Index INT, Output INT, Block_Hash VARCHAR(64))")
+        self._cur.execute("CREATE TABLE UTXO(Transaction_Hash VARCHAR(64), Transaction TEXT, Transaction_Index INT, Output INT, Block_Hash VARCHAR(64),PRIMARY KEY (Transaction_Hash,Transaction_Index))")
         self._cur.execute("CREATE TABLE Peers(IP VARCHAR(15) ,Port INT, Type TEXT, Flags TEXT, Last_Contact INT, Last_Ping INT, PRIMARY KEY(IP,Port))")
         self._cur.execute("CREATE TABLE Alert_Users(Username VARCHAR(16) PRIMARY KEY, Public_Key VARCHAR(200), Private_Key VARCHAR(200), Max_Level INT)")
         
         self._cur.execute("SET FOREIGN_KEY_CHECKS = 1")  # Reenables checks
         self._db_con.commit()
+
+
+def match_str_list(string,match_list):
+    for item in match_list:
+        if item in string:
+            return True
+    return False

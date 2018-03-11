@@ -265,6 +265,68 @@ class Socket_Interface_Extender:
                                 "Payload":Transactions_List}
         self.Send(Address,Transactions_Message)
 
+
+def UMC_Interface_Extension:
+    def Shutdown(self,Address):
+        Message = {"Command":"Shutdown",
+                            "Payload":{}}
+        self.Send(Address,Message)
+
+    def Connect(self,Address,Target_Address):
+        Message = {"Command":"Connect",
+                           "Payload":{"Address":Target_Address}}
+        self.Send(Address,Message)
+
+    def Disconnect(self,Address,Target_Address):
+        Message = {"Command":"Disconnect",
+                              "Payload":{"Address":Target_Address}}
+        self.Send(Address,Message)
+
+    def Config(self,Address,Config):
+        Message = {"Command":"Config",
+                   "Payload":Config}
+        self.Send(Address,Message)
+
+    def Get_Connected_Addresses(self,Address,Target_Address):
+        Message = {"Command":"Disconnect",
+                   "Payload":{}}
+        self.Send(Address,Message)
+
+    def Connected_Addresses(self,Address,Addresses):
+        Message = {"Command":"Connected_Addresses",
+                   "Payload":Addresses}
+        self.Send(Address,Message)
+
+    def Get_UTXOs(self,Address,Address_List):
+        Message = {"Command":"Get_UTXOs",
+                   "Payload":Address_List}
+        self.Send(Address,Message)
+
+    def UTXOs(self,Address,UTXOs):
+        Message = {"Command":"UTXOs",
+                   "Payload":UTXOs}
+        self.Send(Address,Message)
+
+    def Get_Authentication(self,Address):
+        Message = {"Command":"Get_Authentication",
+                   "Payload":{}}
+        self.Send(Address,Message)
+
+    def Authentication_Challenge(self,Address,salt):
+        Message = {"Command":"Authentication_Challenge",
+                   "Payload":{"Salt":salt}}
+        self.Send(Address,Message)
+
+    def Authentication(self,Address,Hash):
+        Message = {"Command":"Authentication",
+                   "Payload":{"Hash":Hash}}
+        self.Send(Address,Message)
+
+    def Authentication_Outcome(self,Address,Outcome):
+        Message = {"Command":"Authentication",
+                   "Payload":{"Outcome":Outcome}}
+        self.Send(Address,Message)
+
 class Socket_Interface(Basic_Socket_Interface,Socket_Interface_Extender):
     def __binder(self):     #Used to form the new class
         pass            
@@ -287,6 +349,7 @@ class Network_Node:
         self._Last_Contact = Last_Contact
         self._Last_Ping = Last_Ping
         self._Remote_Time = Remote_Time
+        self._Authentication = False
 
     def Get_Version(self):
         return self._Version
@@ -322,6 +385,13 @@ class Network_Node:
         return self._Remote_Time
     def Set_Remote_Time(self,Time):
         self._Remote_Time = Time
+
+    def Is_Authenticated(self):
+        return self._Authentication is True
+    def Get_Authentication(self):
+        return self._Authentication
+    def Set_Authentication(self,Value):
+        self._Authentication = Value
 
     
         

@@ -1,5 +1,5 @@
-import Networking_System, Database_System, Alert_System, Chain_System, Block_System, Transaction_System, Mempool_System, Mining_System
-import random,time,numpy
+import Networking_System, Database_System, Alert_System, Chain_System, Block_System, Transaction_System, Mempool_System, Mining_System, base64_System
+import random,time,numpy,os
 
 class Time_Keeper:
     def __init__(self):
@@ -81,10 +81,10 @@ class Main_Handler:
         self._Max_SC_Messages = Max_SC_Messages
         self._Max_Connections = Max_Connections
         self._Miner = Miner
-        self._UMCs = {}  #UMC_Node lists list
-        self._UMC_SI = Networking_System.Socket_Interface(TPort = 9000)
+##        self._UMC_SI = Networking_System.Socket_Interface(TPort = 9000)
         self._SI = Networking_System.Socket_Interface(Max_Connections)
         self._Network_Nodes = {}  #Address :Network_Node
+        self._UMCs = {}  #UMC_Node lists list
         self._Time = Time_Keeper()
         
 
@@ -125,11 +125,14 @@ class Main_Handler:
             "Transactions":self.On_Transactions,
                 }
         self._UMC_Commands = {
-            "Peer_Connected":self.On_UMC_Connected,
-            "Peer_Disconnected":self.On_UMC_Disconnected,
             "Shutdown":self.On_UMC_Shutdown,
             "Connect":self.On_UMC_Connect,
             "Disconnect":self.On_UMC_Disconnect,
+            "Get_Authentication":self.On_UMC_Get_Authentication,
+            "Authentication":self.On_UMC_Authentication,
+            "Config":self.On_UMC_Config,
+            "Get_Connected_Addresses":self.On_UMC_Get_Connected_Addresses,
+            "Get_UTXOs":self.On_UMC_Get_UTXOs
                 }
         print("Main_Handler started.")
 
@@ -150,11 +153,15 @@ class Main_Handler:
         while not self._SI.Output_Queue_Empty() and Processed_Message_Number < self._Max_SC_Messages:
             message = self._SI.Get_Item()
 
-            if message["Command"] in self._Node_Commands:
-                self._Node_Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
+            if message["Command"] in self._UMC_Commands and message["Address"] in self._UMCs:
+                self._UMC_Commands[message["Command"]](message)  #Execute the relevant UMC command with the message as an argument
+            elif message["Command"] in self._Node_Commands:
+                self._Node_Commands[message["Command"]](message)  #Execute the relevant Node command with the message as an argument
+                
             if message["Address"] in self._Network_Nodes:
-                self._Network_Nodes[message["Address"]].Set_Last_Contact(self._Time.time())  #Mark as last contact
-
+                self._Network_Nodes[message["Address"]].Set_Last_Contact(self._Time.time())  #Mark as last contact 
+            elif message["Address"] in self._UMCs:
+                self._UMCs[message["Address"]].Set_Last_Contact(self._Time.time())  #Mark as last contact for UMCs
             Processed_Message_Number +=1
 
             
@@ -170,6 +177,7 @@ class Main_Handler:
         self._SI.Get_Node_Info(Message["Payload"]["Address"])
     def On_Peer_Disconnected(self,Message):
         self._Network_Nodes.pop(Message["Payload"]["Address"],None)
+        self._UMCs.pop(Message["Payload"]["Address"],None)
 
     def On_Ping(self,Message):
         self._SI.Ping_Response(Message["Address"],Message["Payload"]["Time_Sent"],self._Time.time())
@@ -180,10 +188,20 @@ class Main_Handler:
     def On_Get_Node_Info(self,Message):
         self._SI.Node_Info(Message["Address"],self._Node_Info.Get_Version(),self._Node_Info.Get_Type(),self._Node_Info.Get_Flags())
     def On_Node_Info(self,Message):
-        Node = self._Network_Nodes[Message["Address"]]
+        if Message["Address"] in self._Network_Nodes:
+            Node = self._Network_Nodes[Message["Address"]]
+        else:
+            Node = self._UMCs[Message["Address"]]
+            
         Node.Set_Version(Message["Payload"]["Version"])
         Node.Set_Type(Message["Payload"]["Type"])
         Node.Set_Flags(Message["Payload"]["Flags"])
+        if Message["Payload"]["Type"] == "UMC":
+            self._UMCs[Message["Address"]]= Node        #Move node to UMC
+            self._Network_Nodes.pop(Message["Address"],None) #Remove node from NetworkNodes
+        elif Message["Address"] in self._UMCs:
+            self._UMCs.pop(Message["Address"],None) #Remove node from UMCs if downgrading
+            
 
     def On_Time_Sync(self,Message):
         self._SI.Time_Sync_Response(Message["Address"],self._Time.time())
@@ -351,32 +369,54 @@ class Main_Handler:
     #                               #
     #################################
 
-    def UMC_Check(self):
-        while not self._UMC_SI.Output_Queue_Empty():            
-            message = self._UMC_SI.Get_Item()
-            
-
-            if message["Command"] in self._UMC_Commands:
-                self._UMC_Commands[message["Command"]](message)
-            elif message["Command"] in self._Node_Commands:
-                self._Node_Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
-
+##    def UMC_Check(self):
+##        while not self._UMC_SI.Output_Queue_Empty():            
+##            message = self._UMC_SI.Get_Item()
+##            
+##
+##            if message["Command"] in self._UMC_Commands:
+##                self._UMC_Commands[message["Command"]](message)
+##            elif message["Command"] in self._Node_Commands:
+##                self._Node_Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
+##
 
 
     def On_UMC_Shutdown(self,message):
         self._Exit = True
         print("MAIN HANDLER IS SHUTTING DOWN")
 
+    def On_UMC_Get_Authentication(self,message):
+        salt = base64_System.str_to_b64(os.urandom(64))
+        SECRET_KEY = 'vql5apinpc0ehjpc1vzuhcncd4tl0heifaimg9heckfg8+q9sbpidryer+utu2gf/ify1b0fmsd8\nbzipih53tvryuj9u0kqnifcinc3vj75mvgnpianj+bu7wlj7vxwbgjwq/jyufkxtxpimh572woxx\ncha6nllvgacc05jekwe=\n'
+        key = hashlib.sha256((salt+SECRET_KEY).encode()).hexdigest()
+        self._UMCs[message["Address"]].Set_Authentication(key)
+        self._SI.Authentication_Challenge(message["Address"],salt)
+
+    def On_UMC_Authentication(self,message):
+        if message["Payload"]["Hash"] == self._UMCs[message["Address"]].Get_Authentication():
+            self._UMCs.Set_Authentication(True)
+            self._SI.Authentication_Outcome(message["Address"],True)
+        else:
+            self._SI.Authentication_Outcome(message["Address"],False)
+
     def On_UMC_Connect(self,message):
         self._SI.Create_Connection(message["Payload"]["Address"])
-
     def On_UMC_Disconnect(self,message):
         self._SI.Create_Connection(message["Payload"]["Address"])
         
-    def On_UMC_Connected(self,Message):
-        self._UMCs[Message["Payload"]["Address"]] = UI_Main_Connection.U_Node(Message["Payload"]["Address"])
-    def On_UMC_Disconnected(self,Message):
-        self._UMCs.pop(Message["Payload"]["Address"],None)
+##    def On_UMC_Connected(self,Message):
+##        self._UMCs[Message["Payload"]["Address"]] = UI_Main_Connection.U_Node(Message["Payload"]["Address"])
+##    def On_UMC_Disconnected(self,Message):
+##        self._UMCs.pop(Message["Payload"]["Address"],None)
+    def On_UMC_Config(self,Message):
+        self._UMCs[Message["Address"]].config(Message["Payload"])
+
+    def On_UMC_Get_Connected_Addresses(self,Message):
+        self._UMC_SI.Connected_Addresses(Message["Address"],list(self._Network_Nodes))
+
+    def On_UMC_Get_UTXOs(self,Message):
+        UTXOs = self._DB.Get_UTXOs_Match(Message["Payload"])
+        self._UMC_SI.UTXOs(Message["Address"],UTXOs)
 
 
 
