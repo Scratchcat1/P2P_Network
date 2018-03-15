@@ -1,5 +1,5 @@
 import tkinter as tk
-
+import Auto_UI,time,hashlib
 
 class UI_Window:
     def __init__(self,root):
@@ -11,7 +11,7 @@ class UI_Window:
         #
         ##########################################################################
         self._root = root
-        self._root.title("HI")
+        self._root.title("Very Window. Wow Display!")
         self._root.geometry("500x300+100+100")
         self._global_frame = tk.Frame(root)
         self._main_frame = tk.Frame(self._global_frame)
@@ -68,9 +68,30 @@ class UI_Window:
         gen_menubar.add_command(label = "Connect_Dialog",command = lambda :self.Connect_Dialog())
         gen_menubar.add_command(label = "Disconnect_Dialog",command = lambda :self.Disconnect_Dialog())
         gen_menubar.add_command(label = "Shutdown_Dialog",command = lambda :self.Shutdown_Dialog())
+        gen_menubar.add_command(label = "Get_Connected_Addresses_Dialog",command = lambda :self.Get_Connected_Addresses_Dialog())
         menubar.add_cascade(label = "Generic",menu = gen_menubar)
+
+        UMC_menubar = tk.Menu(menubar, tearoff = 1)
+        UMC_menubar.add_command(label = "UMC_Connect_Dialog",command = lambda :self.UMC_Connect_Dialog())
+        UMC_menubar.add_command(label = "UMC_Disconnect_Dialog",command = lambda :self.UMC_Disconnect_Dialog())
+        menubar.add_cascade(label = "UMC",menu = UMC_menubar)
+        
         self._root.config(menu = menubar)
 
+    def wait_for_message(self,filter_func,wait_time = 2):
+        start_time = time.time()
+        while start_time+wait_time < time.time():
+            Processed_Message_Number = 0
+            while not self._SI.Output_Queue_Empty() and Processed_Message_Number < 100:
+                message = self._SI.Get_Item()
+                if filter_func(message):
+                    return message
+                else:
+                    self.Message_Queue.put(message)
+                    Processed_Message_Number +=1
+            self._root.update_idletasks()
+        raise Exception("Message not recieved in allotted time period")
+            
 
     def Home_Dialog(self):
         self.reset_main_frame()
@@ -84,45 +105,77 @@ class UI_Window:
 
     def Connect_Dialog(self):
         self.reset_main_frame()
-        ip_label,ip_entry = Entry_Label(self._main_frame,"IP")
-        port_label,port_entry = Entry_Label(self._main_frame,"Port","8000",row = 2)
-        
-        
-        go_button = tk.Button(self._main_frame,text = "Go",command = lambda : self.On_Connect_Go(ip_entry.get(),int(port_entry.get())))
-        go_button.grid(row = 3,column = 0)
+        form = Auto_UI.Connect_Dialog(Go = self.On_Connect_Go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
         
     def On_Connect_Go(self,IP,Port):
-        self.set_banner("Connection message sent for: "+IP+" "+str(Port))
+        self.set_banner("Connection message sent for: "+IP+":"+str(Port))
         self._UMC.Connect(self._TARGET_ADDRESS,(IP,Port))
 
-
+        ###########
 
     def Disconnect_Dialog(self):
         self.reset_main_frame()
-        ip_label,ip_entry = Entry_Label(self._main_frame,"IP")
-        port_label,port_entry = Entry_Label(self._main_frame,"Port","8000",row = 2)
-
-        go_button = tk.Button(self._main_frame,text = "Go",command = lambda : self.On_Disconnect_Go(ip_entry.get(),int(port_entry.get())))
-        go_button.grid(row = 3,column = 0)
+        form = Auto_UI.Disconnect_Dialog(Go = self.On_Disconnect_Go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
     def On_Disconnect_Go(self,IP,Port):
-        self.set_banner("Disconnection message sent for "+IP+" "+str(Port))
+        self.set_banner("Disconnection message sent for "+IP+":"+str(Port))
         self._UMC.Disconnect(self._TARGET_ADDRESS,(IP,Port))
 
+        #########
 
     def Shutdown_Dialog(self):
         self.reset_main_frame()
-        label = tk.Label(self._main_frame,text = "Are you sure you want to shutdown?")
-        label.grid(row = 1,column = 0)
-
-        go_button = tk.Button(self._main_frame,text = "Go",command = lambda : self.On_Shutdown_Go())
-        go_button.grid(row = 3,column = 0)
+        form = Auto_UI.Shutdown_Dialog(Go = self.On_Shutdown_Go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
     def On_Shutdown_Go(self):
         self.set_banner("Shutting down...")
         self._UMC.Shutdown(self._TARGET_ADDRESS)
 
+        ########
 
+
+    def UMC_Connect_Dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.UMC_Connect_Dialog(Go = self.On_UMC_Connect_Go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def On_UMC_Connect_Go(self,IP,Port,Password):
+        self._UMC.Create_Connection((IP,Port))
+        time.sleep(0.1) #Wait for connection to form
+        self._UMC.Get_Authentication((IP,Port))
+        auth_challenge = self.wait_for_message(lambda m:m["Address"] == (IP,Port) and m["Command"] == "Authentication_Challenge")
+        self._UMC.Authentication((IP,Port),hashlib.sha256((auth_challenge["Payload"]["Salt"]+Password).encode()).hexdigest())
+        auth_outcome = self.wait_for_message(lambda m:m["Address"] == (IP,Port) and m["Command"] == "Authentication_Outcome")
+        self.set_banner(auth_outcome["Payload"]["Outcome"])
+
+        #########
+
+    def UMC_Disconnect_Dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.UMC_Disconnect_Dialog(Go = self.On_UMC_Disconnect_Go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def On_UMC_Disconnect_Go(self,IP,Port):
+        self._UMC.Exit((IP,Port))
+        exit_response = self.wait_for_message(lambda m:m["Address"] == (IP,Port) and m["Command"] == "Exit_Response")
+        self._UMC.Kill_Connection((IP,Port))
+
+        #########
+
+    def Get_Connected_Addresses_Dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.Get_Connected_Addresses_Dialog(Go = self.On_Get_Connected_Addresses_Go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def On_Get_Connected_Addresses_Go(self):
+        self.set_banner("Sent message for connected addresses")
+        self._UMC.Get_Connected_Addresses(self._TARGET_ADDRESS)
+        
+    
     
 
 
@@ -166,17 +219,15 @@ class UI_Window:
             
         
 
-def Entry_Label(frame,label_text,entry_default="",row = 1, column = 0):
-    label = tk.Label(frame,text = label_text)
-    entry = tk.Entry(frame)
-    entry.insert(0,entry_default)
-
-    label.grid(row = row,column = column)
-    entry.grid(row = row,column = column+1)
-    return label,entry
+##def Entry_Label(frame,label_text,entry_default="",row = 1, column = 0):
+##    label = tk.Label(frame,text = label_text)
+##    entry = tk.Entry(frame)
+##    entry.insert(0,entry_default)
+##
+##    label.grid(row = row,column = column)
+##    entry.grid(row = row,column = column+1)
+##    return label,entry
     
-
-##def Dialog_Creator(frame,configuration):
     
 
         
