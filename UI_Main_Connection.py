@@ -13,14 +13,24 @@ class U_Node:
         self._authenticated = value
 
     def config(self,config_data):
+        """
+        Config comes in the form []
+        items:
+        enable_block_send:Boolean
+        tx_filter:
+        """
         for item in config_data:
             if item == "enable_block_send":
                 self._enable_block_send = config_data[item]
             elif item == "tx_filter":
                 self._tx_filter = config_data[item]
 
-    def tx_filter(self,tx):
-        pass
+    def get_enable_block_send(self):
+        return self._enable_block_send
+    
+
+##    def tx_filter(self,tx):
+##        if 
 
             
 class UMC(Networking_System.Socket_Interface):

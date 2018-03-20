@@ -37,7 +37,7 @@ class UI_Window:
         self._global_frame = tk.Frame(root)
         self._global_frame.grid(row = 0,column = 0)
 
-        abort_button = tk.Button(self._global_frame,text = "ABORT",command = lambda : self.Home_Dialog())
+        abort_button = tk.Button(self._global_frame,text = "ABORT",command = lambda : self.home_dialog())
         abort_button.grid(row = 0,column = 0)
 
 
@@ -65,15 +65,15 @@ class UI_Window:
         menubar.add_command(label = "Test print",command = lambda :print("HI THIS IS TEST BUTTON MENU BAR"))
 
         gen_menubar = tk.Menu(menubar, tearoff = 1)
-        gen_menubar.add_command(label = "Connect_Dialog",command = lambda :self.Connect_Dialog())
-        gen_menubar.add_command(label = "Disconnect_Dialog",command = lambda :self.Disconnect_Dialog())
-        gen_menubar.add_command(label = "Shutdown_Dialog",command = lambda :self.Shutdown_Dialog())
-        gen_menubar.add_command(label = "Get_Connected_Addresses_Dialog",command = lambda :self.Get_Connected_Addresses_Dialog())
+        gen_menubar.add_command(label = "Connect_Dialog",command = lambda :self.connect_dialog())
+        gen_menubar.add_command(label = "Disconnect_Dialog",command = lambda :self.disconnect_dialog())
+        gen_menubar.add_command(label = "Shutdown_Dialog",command = lambda :self.shutdown_dialog())
+        gen_menubar.add_command(label = "Get_Connected_Addresses_Dialog",command = lambda :self.on_get_connected_addresses_dialog())
         menubar.add_cascade(label = "Generic",menu = gen_menubar)
 
         UMC_menubar = tk.Menu(menubar, tearoff = 1)
-        UMC_menubar.add_command(label = "UMC_Connect_Dialog",command = lambda :self.UMC_Connect_Dialog())
-        UMC_menubar.add_command(label = "UMC_Disconnect_Dialog",command = lambda :self.UMC_Disconnect_Dialog())
+        UMC_menubar.add_command(label = "UMC_Connect_Dialog",command = lambda :self.UMC_connect_dialog())
+        UMC_menubar.add_command(label = "UMC_Disconnect_Dialog",command = lambda :self.UMC_disconnect_dialog())
         menubar.add_cascade(label = "UMC",menu = UMC_menubar)
         
         self._root.config(menu = menubar)
@@ -87,13 +87,17 @@ class UI_Window:
                 if filter_func(message):
                     return message
                 else:
-                    self.Message_Queue.put(message)
+                    self._message_queue.put(message)
                     Processed_Message_Number +=1
             self._root.update_idletasks()
-        raise Exception("Message not recieved in allotted time period")
+        return {"Command":"Error",
+                "Address":("N/A",-1)
+                "Payload":{"Command":",
+                          "Error_Code":2,
+                          "Error_Info":"Message was not recieved in the allotted time"}
             
 
-    def Home_Dialog(self):
+    def home_dialog(self):
         self.reset_main_frame()
         info_text = "HOME OF THE CATOTAC"
         info_text_widget = tk.Text(self._main_frame)
@@ -103,47 +107,47 @@ class UI_Window:
         
     ###########################################################
 
-    def Connect_Dialog(self):
+    def connect_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.Connect_Dialog(Go = self.On_Connect_Go)
+        form = Auto_UI.connect_dialog(Go = self.on_connect_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
         
-    def On_Connect_Go(self,IP,Port):
+    def on_connect_go(self,IP,Port):
         self.set_banner("Connection message sent for: "+IP+":"+str(Port))
         self._UMC.Connect(self._TARGET_ADDRESS,(IP,Port))
 
         ###########
 
-    def Disconnect_Dialog(self):
+    def disconnect_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.Disconnect_Dialog(Go = self.On_Disconnect_Go)
+        form = Auto_UI.disconnect_dialog(Go = self.on_disconnect_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
-    def On_Disconnect_Go(self,IP,Port):
+    def on_disconnect_go(self,IP,Port):
         self.set_banner("Disconnection message sent for "+IP+":"+str(Port))
         self._UMC.Disconnect(self._TARGET_ADDRESS,(IP,Port))
 
         #########
 
-    def Shutdown_Dialog(self):
+    def shutdown_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.Shutdown_Dialog(Go = self.On_Shutdown_Go)
+        form = Auto_UI.shutdown_dialog(Go = self.on_shutdown_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
-    def On_Shutdown_Go(self):
+    def on_shutdown_go(self):
         self.set_banner("Shutting down...")
         self._UMC.Shutdown(self._TARGET_ADDRESS)
 
         ########
 
 
-    def UMC_Connect_Dialog(self):
+    def UMC_connect_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.UMC_Connect_Dialog(Go = self.On_UMC_Connect_Go)
+        form = Auto_UI.UMC_connect_dialog(Go = self.on_UMC_connect_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
-    def On_UMC_Connect_Go(self,IP,Port,Password):
+    def on_UMC_connect_go(self,IP,Port,Password):
         self._UMC.Create_Connection((IP,Port))
         time.sleep(0.1) #Wait for connection to form
         self._UMC.Get_Authentication((IP,Port))
@@ -154,33 +158,140 @@ class UI_Window:
 
         #########
 
-    def UMC_Disconnect_Dialog(self):
+    def UMC_disconnect_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.UMC_Disconnect_Dialog(Go = self.On_UMC_Disconnect_Go)
+        form = Auto_UI.UMC_disconnect_dialog(Go = self.on_UMC_disconnect_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
-    def On_UMC_Disconnect_Go(self,IP,Port):
+    def on_UMC_disconnect_go(self,IP,Port):
         self._UMC.Exit((IP,Port))
         exit_response = self.wait_for_message(lambda m:m["Address"] == (IP,Port) and m["Command"] == "Exit_Response")
         self._UMC.Kill_Connection((IP,Port))
+        self.display_message(exit_response)
 
         #########
 
-    def Get_Connected_Addresses_Dialog(self):
+    def get_connected_addresses_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.Get_Connected_Addresses_Dialog(Go = self.On_Get_Connected_Addresses_Go)
+        form = Auto_UI.get_connected_addresses_dialog(Go = self.on_get_connected_addresses_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
-    def On_Get_Connected_Addresses_Go(self):
+    def on_get_connected_addresses_go(self):
         self.set_banner("Sent message for connected addresses")
         self._UMC.Get_Connected_Addresses(self._TARGET_ADDRESS)
+        connected_addresses = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Connected_Addresses")
+        self.display_message(connected_addresses)
+        
+        #########
+        
+    def get_peers_dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.get_peers_dialog(Go = self.on_get_peers_go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def on_get_peers_go(self):
+        self.set_banner("Send message to get peers")
+        self._UMC.Get_Peers(self._TARGET_ADDRESS)
+        peers_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Get_Peers_Response")
+        self.display_message(peers_message)
+
+        ############
+        # All UTXOs not available due to sheer quantity
+        ############
+
+    def send_alert_dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.send_alert_dialog(Go = self.on_send_alert_go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def on_send_alert_go(self, username, message, level):
+        self.set_banner("Signing and sending alert")
+        timestamp = time.time()
+        self._UMC.Sign_Alert(self._TARGET_ADDRESS, username, message, timestamp, level)
+        signature_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Signed_Alert")        
+        self._UMC.Alert(self._TARGET_ADDRESS, username, message, timestamp, signature_message["Payload"]["Signature"], level)
+        
+        #############
+
+    def get_wallet_addresses_dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.get_wallet_addresses_dialog(Go = self.on_get_wallet_addresses_go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def on_get_wallet_addresses_go(self):
+        self._UMC.Get_Wallet_Addresses(self._TARGET_ADDRESS)
+        wallet_addresses_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Addresses")
+        self.display_message(wallet_addresses_message)
+
+        ############
+
+    def new_wallet_address_dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.new_wallet_address_dialog(Go = self.on_new_wallet_address_go())
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def on_new_wallet_address_go(self):
+        self._UMC.New_Wallet_Address(self._TARGET_ADDRESS)
+        wallet_address_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Addresses")
+        self.display_message(wallet_address_message)
+
+        ##########
+
+    def sign_message_dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.sign_message_dialog(Go = self.on_sign_message_go())
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def on_sign_message_go(self,wallet_address,message):
+        self._UMC.Sign_Message(self._TARGET_ADDRESS,wallet_address,message)
+        signature_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Signed_Message")
+        self.display_message(signature_message)
+
+        #########
+
+    def get_wallet_address_public_key_dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.get_wallet_address_public_key_dialog(Go = self.on_get_wallet_address_public_key_go())
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def get_wallet_address_public_key_go(self,wallet_address):
+        self._UMC.Get_Wallet_Address_Public_Key(self._TARGET_ADDRESS,wallet_address)
+        public_key_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Address_Public_Key")
+        self.display_message(public_key_message)
+
+        ###########
+
+    def get_wallet_address_private_key_dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.get_wallet_address_private_key_dialog(Go = self.on_get_wallet_address_private_key_go())
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def get_wallet_address_private_key_go(self,wallet_address):
+        self._UMC.Get_Wallet_Address_Private_Key(self._TARGET_ADDRESS,wallet_address)
+        private_key_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Address_Private_Key")
+        self.display_message(private_key_message)
+
+        #########
+
+        #########
+        #dump wallet
+        #wallet utxos
+        #wallet transactions
+        #########
+
+
+
+
+
+
+
+
+
+
+
+
         
     
-    
-
-
-
-
 
     ##############################################################################
 

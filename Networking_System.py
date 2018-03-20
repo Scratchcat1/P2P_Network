@@ -160,6 +160,11 @@ class Basic_Socket_Interface:
         return self._SC_Out_Queue
 
 class Socket_Interface_Extender:
+    def Error(self,address,command, error_code = 2, error_info = "An error occured executing the command"):
+        message = {"Command":"Error",
+                   "Payload":{"Command":command,
+                              "Error_Code":error_code,
+                              "Error_Info":error_info}
     def Ping(self,Address,Time):  #Used to ping a node
         Ping_Message = {"Command":"Ping",
                        "Payload":{"Time_Sent":Time}}
@@ -222,7 +227,7 @@ class Socket_Interface_Extender:
         self.Send(Address,Get_Peers_Message)
 
     def Get_Peers_Response(self,Address,Peers):  #Peers is list containing addresses of peers
-        Get_Peers_Response_Message = {"Command":"Get_Peers",
+        Get_Peers_Response_Message = {"Command":"Get_Peers_Response",
                                       "Payload":{"Peers":Peers}}
         self.Send(Address,Get_Peers_Response_Message)
 
@@ -266,7 +271,7 @@ class Socket_Interface_Extender:
         self.Send(Address,Transactions_Message)
 
 
-def UMC_Interface_Extension:
+class UMC_Interface_Extension:
     def Shutdown(self,Address):
         Message = {"Command":"Shutdown",
                             "Payload":{}}
@@ -281,6 +286,8 @@ def UMC_Interface_Extension:
         Message = {"Command":"Disconnect",
                               "Payload":{"Address":Target_Address}}
         self.Send(Address,Message)
+
+#####################
 
     def Config(self,Address,Config):
         Message = {"Command":"Config",
@@ -297,6 +304,8 @@ def UMC_Interface_Extension:
                    "Payload":Addresses}
         self.Send(Address,Message)
 
+#####################
+
     def Get_UTXOs(self,Address,Address_List):
         Message = {"Command":"Get_UTXOs",
                    "Payload":Address_List}
@@ -306,7 +315,9 @@ def UMC_Interface_Extension:
         Message = {"Command":"UTXOs",
                    "Payload":UTXOs}
         self.Send(Address,Message)
-
+        
+###################
+        
     def Get_Authentication(self,Address):
         Message = {"Command":"Get_Authentication",
                    "Payload":{}}
@@ -326,6 +337,98 @@ def UMC_Interface_Extension:
         Message = {"Command":"Authentication",
                    "Payload":{"Outcome":Outcome}}
         self.Send(Address,Message)
+
+###################
+
+    def Sign_Alert(self,Address,Username,Message,TimeStamp,Level):   #Get the node to sign the alert
+        Message = {"Command":"Sign_Alert",
+                   "Payload":{"Username":Username,
+                              "Message":Message,
+                              "TimeStamp":TimeStamp,
+                              "Level":Level}}
+        self.Send(Address,Message)
+
+    def Signed_Alert(self,Address,Signature):
+        Message = {"Command":"Sign_Alert",
+                   "Payload":{"Signature":Signature}}
+        self.Send(Address,Message)
+
+##################
+
+    def Get_Wallet_Addresses(self,Address):
+        Message = {"Command":"Get_Wallet_Addresses",
+                   "Payload":{}}
+        self.Send(Address,Message)
+
+    def Wallet_Addresses(self,Address,Wallet_Addresses):
+        Message = {"Command":"Wallet_Addresses",
+                   "Payload":Wallet_Addresses}
+        self.Send(Address,Message)
+
+    def New_Wallet_Address(self,Address):
+        Message = {"Command":"New_Wallet_Address",
+                   "Payload":{}}
+        self.Send(Address,Message)
+
+    def Sign_Message(self,Address,Wallet_Address,Sign_Message):
+        Message = {"Command":"Sign_Message",
+                   "Payload":{"Sign_Message":Sign_Message,
+                              "Wallet_Address":Wallet_Address}}
+        self.Send(Address,Message)
+
+    def Signed_Message(self,Address,Signature):
+        Message = {"Command":"Signed_Message",
+                   "Payload":{"Signature":Signature}}
+        self.Send(Address,Message)
+
+    def Get_Wallet_Address_Public_Key(self,Address,Wallet_Address):
+        Message = {"Command":"Get_Wallet_Address_Public_Key",
+                   "Payload":{"Wallet_Address":Wallet_Address}}
+        self.Send(Address,Message)
+
+    def Wallet_Address_Public_Key(self,Address,Public_Key):
+        Message = {"Command":"Wallet_Address_Public_Key",
+                   "Payload":{"Public_Key":Public_Key}}
+        self.Send(Address,Message)
+
+    def Get_Wallet_Address_Private_Key(self,Address,Wallet_Address):
+        Message = {"Command":"Get_Wallet_Address_Private_Key",
+                   "Payload":{"Wallet_Address":Wallet_Address}}
+        self.Send(Address,Message)
+
+    def Wallet_Address_Private_Key(self,Address,Private_Key):
+        Message = {"Command":"Wallet_Address_Private_Key",
+                   "Payload":{"Private_Key":Private_Key}}
+        self.Send(Address,Message)
+
+    def Dump_Wallet(self,Address):
+        Message = {"Command":"Dump_Wallet",
+                   "Payload":{}}
+        self.Send(Address,Message)
+
+    def Wallet_Dump_Data(self,Address,Wallet_Dump):
+        Message = {"Command":"Wallet_Dump_Data",
+                   "Payload":{"Wallet_Dump":Wallet_Dump}}
+        self.Send(Address,Message)
+
+    def Get_Wallet_UTXOs(self,Address,Wallet_Address_List = []):        #Response is a UTXO message
+        Message = {"Command":"Get_Wallet_UTXOs",
+                   "Payload":{"Wallet_Address_List":Wallet_Address_List}}
+        self.Send(Address,Message)
+
+    def Get_Wallet_Transactions(self,Address,Wallet_Address_List = []): #Response is a Transaction message
+        Message = {"Command":"Get_Wallet_Transactions",
+                   "Payload":{"Wallet_Address_List":Wallet_Address_List}}
+        self.Send(Address,Message)
+
+        
+
+
+
+
+
+
+
 
 class Socket_Interface(Basic_Socket_Interface,Socket_Interface_Extender):
     def __binder(self):     #Used to form the new class
@@ -350,6 +453,7 @@ class Network_Node:
         self._Last_Ping = Last_Ping
         self._Remote_Time = Remote_Time
         self._Authentication = False
+        self._Enable_Block_Send = True
 
     def Get_Version(self):
         return self._Version
@@ -392,6 +496,9 @@ class Network_Node:
         return self._Authentication
     def Set_Authentication(self,Value):
         self._Authentication = Value
+
+    def Get_Enable_Block_Send(self):
+        return self._Enable_Block_Send
 
     
         

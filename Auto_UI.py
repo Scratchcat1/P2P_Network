@@ -152,8 +152,13 @@ def create_base_string(size):
     return "{0:"+str(size)+"} : {1}"
 
         
+#######################################################
 
-def Connect_Dialog(**kwargs):
+#######################################################
+
+
+#Connect the node to a server
+def connect_dialog(**kwargs):
     form = UI_Form()
     form.set_title("Connect to node")
     form.add_query("IP",str)
@@ -161,21 +166,24 @@ def Connect_Dialog(**kwargs):
     form.add_command("Go",kwargs.get("Go",None),("%IP%","%Port%"))
     return form
 
-def Disconnect_Dialog(**kwargs):
+#Connect the node from a server
+def disconnect_dialog(**kwargs):
     form = UI_Form()
     form.set_title("Disconnect from node")
     form.add_query("IP",str)
     form.add_query("Port",int)
     form.add_command("Go",kwargs.get("Go",None),("%IP%","%Port%"))
     return form
-        
-def Shutdown_Dialog(**kwargs):
+
+#Shutdown the node
+def shutdown_dialog(**kwargs):
     form = UI_Form()
     form.set_title("Shutdown")
     form.add_command("Go",kwargs.get("Go",None),())
     return form
 
-def UMC_Connect_Dialog(**kwargs):
+#Connect the UMC to a node
+def UMC_connect_dialog(**kwargs):
     form = UI_Form()
     form.set_title("UMC connect to a node")
     form.add_query("IP",str)
@@ -183,8 +191,9 @@ def UMC_Connect_Dialog(**kwargs):
     form.add_query("Password",str)
     form.add_command("Go",kwargs.get("Go",None),("%IP%","%Port%","%Password%"))
     return form
-    
-def UMC_Disconnect_Dialog(**kwargs):
+
+#Disconnect the UMC from a node
+def UMC_disconnect_dialog(**kwargs):
     form = UI_Form()
     form.set_title("UMC disconnect to a node")
     form.add_query("IP",str)
@@ -192,15 +201,94 @@ def UMC_Disconnect_Dialog(**kwargs):
     form.add_command("Go",kwargs.get("Go",None),("%IP%","%Port%"))
     return form
 
-def Get_Connected_Addresses_Dialog(**kwargs):
+#Get the nodes connected to the current node
+def get_connected_addresses_dialog(**kwargs):
     form = UI_Form()
     form.set_title("Get connected node addresses")
     form.add_command("Go",kwargs.get("Go",None),())
     return form
 
-def Get_Peers_Dialog(**kwargs):
+#Get the peers of the current node
+def get_peers_dialog(**kwargs):
     form = UI_Form()
     form.set_title("Get node peers")
     form.add_command("Go",kwargs.get("Go",None),())
     return form
-    
+
+#Get all the UTXOs
+def get_UTXOs_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Get the UTXOs from the node")
+    form.add_command("Go",kwargs.get("Go",None),())
+    return form
+
+#Send an alert using the credentials stored on the current node
+def send_alert_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Send an alert")
+    form.add_query("Username",str)
+    form.add_query("Message",str)
+    form.add_query("Level",int)
+    form.add_command("Go",kwargs.get("Go",None),("%Username%","%Message%","%Level%"))
+    return form
+
+#Get the wallet addresses for the wallet attached to the node
+def get_wallet_addresses_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Get wallet addresses")
+    form.add_command("Go",kwargs.get("Go",None),())
+    return form
+
+#Create a new address in the wallet attached to the node
+def new_wallet_address_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Create a new wallet address")
+    form.add_command("Go",kwargs.get("Go",None),())
+    return form
+
+#Sign the message supplied using the given address private key in the wallet
+def sign_message_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Sign a message")
+    form.add_query("Wallet Address",str)
+    form.add_query("Message",str)
+    form.add_command("Go",kwargs.get("Go",None),("%Wallet Address%","%Message%"))
+    return form
+
+#Get the public key of an address in the wallet
+def get_wallet_address_public_key_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Get the public key of a wallet")
+    form.add_query("Address",str)
+    form.add_command("Go",kwargs.get("Go",None),("%Address",))
+    return form
+
+#Get the private key of an address in the wallet
+def get_wallet_address_private_key_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Get the private key of a wallet")
+    form.add_query("Address",str)
+    form.add_command("Go",kwargs.get("Go",None),("%Address"))
+    return form
+
+#Dump the wallet to json
+def dump_wallet_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Dump the wallet and return the information")
+    form.add_command("Go",kwargs.get("Go",None),())
+    return form
+
+#Get the UTXOs in the wallet
+def get_wallet_UTXOs_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Get the UTXOs in the wallet")
+    form.add_command("Go",kwargs.get("Go",None),())
+    return form
+
+#Get all the transactions associated with this wallet.
+def get_wallet_transactions_dialog(**kwargs):
+    form = UI_Form()
+    form.set_title("Get the transactions in the wallet")
+    form.add_command("Go",kwargs.get("Go",None),())
+    return form
+

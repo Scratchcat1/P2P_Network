@@ -1,11 +1,10 @@
 import Database_System, ecdsa, hashlib,codecs, base64_System
 
-def Alert_User_Verify(Current_Time,Username,Message,TimeStamp,Signature,Current_Level):
+def Alert_User_Verify(db_con,Current_Time,Username,Message,TimeStamp,Signature,Current_Level):
     try:
         if Current_Time -5*60*60 > TimeStamp:
             return False
 
-        db_con = Database_System.DBConnection()
         User_Details = db_con.Get_Alert_User(Username)[0]
         db_con.Exit()
 
@@ -21,20 +20,19 @@ def Alert_User_Verify(Current_Time,Username,Message,TimeStamp,Signature,Current_
         print("Signature verification failed",e)
         return False
 
-def Sign_Alert(Username,Message,TimeStamp,Level):
-    db_con = Database_System.DBConnection()
+def Sign_Alert(db_con,Username,Message,TimeStamp,Level):
     Alert_User = db_con.Get_Alert_User(Username)
     db_con.Exit()
     if len(Alert_User) == 0:
-        raise Exception("You do not have the private key for this Alert User")
+        return False,"You do not have the private key for this Alert User"
     Private_Key,Max_Level = Alert_User[0][2],Alert_User[0][3]
 
     if Level > Max_Level:
-        raise Exception("Exceeding max level for this Alert User")
+        return False,"Exceeding max level for this Alert User"
     PrKO = ecdsa.SigningKey.from_string(base64_System.b64_to_bstr(Private_Key))
     Raw_Signature = hashlib.sha256((str(Username)+str(Message)+str(TimeStamp)).encode()).digest()
     Signature = PrKO.sign(Raw_Signature)
-    return codecs.encode(Signature,"base64").decode()
+    return True,codecs.encode(Signature,"base64").decode()
     
     
     

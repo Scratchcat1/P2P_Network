@@ -1,4 +1,4 @@
-import Networking_System, Database_System, Alert_System, Chain_System, Block_System, Transaction_System, Mempool_System, Mining_System, base64_System
+import Networking_System, Database_System, Alert_System, Chain_System, Block_System, Transaction_System, Mempool_System, Mining_System, base64_System, Wallet_System
 import random,time,numpy,os
 
 class Time_Keeper:
@@ -74,13 +74,14 @@ def Val_Limit(Value,Max,Min):   #https://stackoverflow.com/questions/5996881/how
 
     
 class Main_Handler:
-    def __init__(self,Node_Info = Networking_System.Network_Node("127.0.0.1"),Max_Connections = 15,Max_SC_Messages = 100, Miner = None):
+    def __init__(self,Node_Info = Networking_System.Network_Node("127.0.0.1"),Max_Connections = 15,Max_SC_Messages = 100, miner = None,wallet = Wallet_System.Wallet()):
         print("Starting Main_Handler...")
         self._db_con = Database_System.DBConnection()
         self._Node_Info = Node_Info
         self._Max_SC_Messages = Max_SC_Messages
         self._Max_Connections = Max_Connections
-        self._Miner = Miner
+        self._miner = miner
+        self._wallet = wallet
 ##        self._UMC_SI = Networking_System.Socket_Interface(TPort = 9000)
         self._SI = Networking_System.Socket_Interface(Max_Connections)
         self._Network_Nodes = {}  #Address :Network_Node
@@ -90,8 +91,8 @@ class Main_Handler:
 
         self._Mempool = Mempool_System.Mempool()  #Stores unconfirmed transactions
         self._Chain = Chain_System.Chain(self._Mempool)
-        if self._Miner:
-            self._Miner.set_mempool(self._Mempool)
+        if self._miner:
+            self._miner.set_mempool(self._Mempool)
             self.Restart_Miner()
 
         self._Network_Nodes_Check_Timer = Ticker(300)    #Every 300 seconds check nodes
@@ -132,7 +133,10 @@ class Main_Handler:
             "Authentication":self.On_UMC_Authentication,
             "Config":self.On_UMC_Config,
             "Get_Connected_Addresses":self.On_UMC_Get_Connected_Addresses,
-            "Get_UTXOs":self.On_UMC_Get_UTXOs
+            "Get_UTXOs":self.On_UMC_Get_UTXOs,
+            "Sign_Alert":self.On_UMC_Sign_Alert,
+            "Get_Wallet_Addresses":self.On_UMC_Get_Wallet_Addresses,
+            "New_Wallet_Address":self.On_UMC_New_Wallet_Address,
                 }
         print("Main_Handler started.")
 
@@ -210,7 +214,7 @@ class Main_Handler:
         Node.Set_Remote_Time(Message["Payload"]["Time"])
 
     def On_Alert(self,Message):
-        if Alert_System.Alert_User_Verify(self._Time.time(),Message["Payload"]["Username"],Message["Payload"]["Message"],Message["Payload"]["TimeStamp"],Message["Payload"]["Signature"],Message["Payload"]["Level"]):
+        if Alert_System.Alert_User_Verify(self._db_con,self._Time.time(),Message["Payload"]["Username"],Message["Payload"]["Message"],Message["Payload"]["TimeStamp"],Message["Payload"]["Signature"],Message["Payload"]["Level"]):
             for Address in self._Nodes:
                 self._SI.Alert(Message["Payload"]["Username"],Message["Payload"]["Message"],Message["Payload"]["TimeStamp"],Message["Payload"]["Signature"],Message["Payload"]["Level"]-1)
         else:
@@ -284,10 +288,10 @@ class Main_Handler:
             if block.Verify(self._Time.time(),self._Chain.get_difficulty()):
                 self._Chain.add_block(block)            #Add block if it valid
                 self._Rebroadcaster.add_block_hash(block.Get_Block_Hash())
-##                print(block.Get_Block_Hash())
                 if self._Chain.get_highest_block_hash() == block.Get_Block_Hash():   #If this is the highest block
-##                    print("HIGH",block.Get_Block_Hash())
                     self.Restart_Miner()                #Restart the miner if need be.
+                self.UMC_Block_Send(block)
+                
 
     def On_Transactions(self,Message):
         for tx_json in Message["Payload"]:
@@ -345,9 +349,9 @@ class Main_Handler:
                     self._SI.Get_Blocks(address,known_hashes)
 
     def Check_Miner(self):
-        if self._Miner:
-            if self._Miner.has_found_block():
-                block = self._Miner.get_block()
+        if self._miner:
+            if self._miner.has_found_block():
+                block = self._miner.get_block()
 ##                print(block.export_json())
                 internal_block_message = {"Command":"Blocks",
                                           "Address":("127.0.0.1",None),
@@ -356,9 +360,9 @@ class Main_Handler:
 
                     
     def Restart_Miner(self):
-        if self._Miner:
+        if self._miner:
             block_info = self._db_con.Get_Highest_Work_Block()
-            self._Miner.restart_mine(self._Time.time(),self._Chain.get_difficulty(),block_info[0][1]+1,block_info[0][0])  #Start mining on the highest block.
+            self._miner.restart_mine(self._Time.time(),self._Chain.get_difficulty(),block_info[0][1]+1,block_info[0][0])  #Start mining on the highest block.
         
         
     #######################################################################
@@ -368,6 +372,11 @@ class Main_Handler:
     #  UserMainConnection commands  #
     #                               #
     #################################
+
+    def UMC_Block_Send(self,block):
+        for UMC_Address,UMC in self._UMCs.values():
+            if UMC.Get_Enable_Block_Send():
+                self._SI.Blocks(UMC_Address,[Block])
 
 ##    def UMC_Check(self):
 ##        while not self._UMC_SI.Output_Queue_Empty():            
@@ -379,7 +388,10 @@ class Main_Handler:
 ##            elif message["Command"] in self._Node_Commands:
 ##                self._Node_Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
 ##
-
+    def On_UMC_Connect(self,message):
+        self._SI.Create_Connection(message["Payload"]["Address"])
+    def On_UMC_Disconnect(self,message):
+        self._SI.Create_Connection(message["Payload"]["Address"])
 
     def On_UMC_Shutdown(self,message):
         self._Exit = True
@@ -394,15 +406,11 @@ class Main_Handler:
 
     def On_UMC_Authentication(self,message):
         if message["Payload"]["Hash"] == self._UMCs[message["Address"]].Get_Authentication():
-            self._UMCs.Set_Authentication(True)
+            self._UMCs[message["Address"]].Set_Authentication(True)
             self._SI.Authentication_Outcome(message["Address"],True)
         else:
             self._SI.Authentication_Outcome(message["Address"],False)
 
-    def On_UMC_Connect(self,message):
-        self._SI.Create_Connection(message["Payload"]["Address"])
-    def On_UMC_Disconnect(self,message):
-        self._SI.Create_Connection(message["Payload"]["Address"])
         
 ##    def On_UMC_Connected(self,Message):
 ##        self._UMCs[Message["Payload"]["Address"]] = UI_Main_Connection.U_Node(Message["Payload"]["Address"])
@@ -419,7 +427,31 @@ class Main_Handler:
         self._UMC_SI.UTXOs(Message["Address"],UTXOs)
 
 
+##############
 
+    def On_UMC_Sign_Alert(self,Message):
+        alert_details = Message["Payload"]
+        success,signature = Alert_System.Sign_Alert(self._db_con, alert_details["Username"], alert_details["Message"], alert_details["TimeStamp"], alert_details["Level"])
+        if success:
+            self._SI.Signed_Alert(Message["Address"],signature)
+        else:
+            #Sig contains error message if failed
+            self._SI.Error(Message["Address"],"Sign_Alert",error_info = signature)
+
+    def On_UMC_Get_Wallet_Addresses(self,Message):
+        self._SI.Wallet_Addresses(Message["Address"],self._wallet.Get_Addresses())
+
+    def On_UMC_New_Wallet_Address(self,Message):
+        #Generate new address and save wallet
+        self._SI.Wallet_Addresses(Message["Address"],[self._wallet.Generate_New_Address()])
+        self._wallet.Save_Wallet()
+        
+    def On_Sign_Message(self,Message):
+        if self._Wallet.has_address(Message["Payload"]["Wallet_Address"]):
+            signature = self._Wallet.sign(Message["Payload"]["Wallet_Address"],Message["Payload"]["Sign_Message"])
+            self._SI.Signed_Message(Message["Address"],signature)
+        else:
+            self._SI.Error(Message["Address"],"Sign_Message",error_info = "Address not in wallet. Cannot sign")
     #####################################################################
         
         
