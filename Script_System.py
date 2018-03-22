@@ -116,44 +116,8 @@ class Script_Processor:
             for item in code_sections[-1][::-1]:
                 self._Script_List.insert(0,item)
             
-        
-            
-        #Code sections now in form [If, elif....., else]. Need code sections -1 number of operators
-##        Check_Values = [self._stack.pop() for x in range(len(code_sections)-1)]
-##
-##        Go_Else = True
-##        for x in range(len(Check_Values)):
-####            print(x, code_sections[x])
-##            if Check_Values[x] in ["1","True"]:
-##                for item in code_sections[x][::-1]:
-##                    self._Script_List.insert(0,item)
-##                Go_Else = False
-##                break
-##
-##        if Go_Else:
-##            for item in code_sections[-1][::-1]:
-##                self._Script_List.insert(0,item)
         print("IF SYSTEM:",code_sections)
         print("IF SYSTEM:",self._Script_List)
-            
-
-
-            
-##        while item != "ENDIF":
-##            count = 0
-##            code_sections.append([])
-##            while item not in ["ELIF","ELSE","ENDIF"] or count > 0:
-##                item = self._Script_List.pop(0)
-##                code_sections[-1].append(item)
-##                print(item)
-##                if item == "IF":
-##                    count +=1
-##                elif item == "ENDIF":
-##                    count -=1
-##                print(item,count)
-##                
-##            if item != "ENDIF":  # If not last item
-##                item = self._Script_List.pop(0)
 
 
     def Validate_Stack(self):
@@ -163,7 +127,6 @@ class Script_Processor:
             if self._stack.pop() not in ["1","True"]:  # This is to prevent the system seeing arbitary items as True values
                 return False
         return True  # If the stack is empty or everything is True
-##        return (all(x) or len(x) == 0)
         
         
 
