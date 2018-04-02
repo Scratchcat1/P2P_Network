@@ -20,7 +20,7 @@ class Wallet:
     def generate_new_address(self):
         PrKO = ecdsa.SigningKey.generate()
         PuKO = PrKO.get_verifying_key()
-        address = hashlib.sha256(base64_System.str_to_b64(PuKO.to_string(),True)).hexdigest()
+        address = self.to_address(base64_System.str_to_b64(PuKO.to_string(),True))
 ##        print(Address)
 ##        print(PrKO.to_pem().decode())
         self._wallet[address] = {
@@ -30,9 +30,9 @@ class Wallet:
         return address
 
     def sign(self,address,message):
-        message_hash = hashlib.sha256(str(message).encode()).digest()
+##        message_hash = hashlib.sha256(str(message).encode()).digest()
         PrKO = ecdsa.SigningKey.from_string(base64_System.b64_to_bstr(self._wallet[address]["Private_Key"]))
-        signature = PrKO.sign(message_hash)
+        signature = PrKO.sign(message.encode())
         return codecs.encode(signature,"base64").decode()
 
     def get_public_key(self,address):
@@ -43,6 +43,11 @@ class Wallet:
 
     def has_address(self,address):
         return address in self._wallet
+
+    def to_address(self,value):
+        if type(value) != bytes:
+            value = value.encode()
+        return hashlib.sha256(value).hexdigest()
 
     
     

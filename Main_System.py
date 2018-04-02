@@ -1,5 +1,5 @@
 import Networking_System, Database_System, Alert_System, Chain_System, Block_System, Transaction_System, Mempool_System, Mining_System, base64_System, Wallet_System
-import random,time,numpy,os
+import random,time,numpy,os,hashlib
 
 class Time_Keeper:
     def __init__(self):
@@ -40,17 +40,17 @@ class Ticker:
     def zero(self):
         self._Last_Call = 0
 
-class Rebroadcaster(Ticker):  #Ticker with storage
+class Request_Queue(Ticker):  #Ticker with storage
     def __init__(self,Time_Period = 60,max_size = 10000): 
         self._request_queue = []
         self._max_size = max_size
         super().__init__(Time_Period)#Broadcast inventory every timer_length seconds
 
-    def add_block_hash(self,block_hash):
-        self._request_queue.append({"Type":"Block","Payload":block_hash})
+    def add_block_hash(self, block_hash, address = None):
+        self._request_queue.append({"Type":"Block","Payload":block_hash,"Address":address})
 
-    def add_tx_hash(self,tx_hash):
-        self._request_queue.append({"Type":"Transaction","Payload":tx_hash})
+    def add_tx_hash(self, tx_hash, address = None):
+        self._request_queue.append({"Type":"Transaction","Payload":tx_hash,"Address":address})
 
     def get_queue(self,reset = True):
         return_value = self._request_queue
@@ -74,7 +74,7 @@ def Val_Limit(Value,Max,Min):   #https://stackoverflow.com/questions/5996881/how
 
     
 class Main_Handler:
-    def __init__(self,Node_Info = Networking_System.Network_Node("127.0.0.1"),Max_Connections = 15,Max_SC_Messages = 100, miner = None,wallet = Wallet_System.Wallet()):
+    def __init__(self,Node_Info = Networking_System.Network_Node(("127.0.0.1",8000)),Max_Connections = 15,Max_SC_Messages = 100, miner = None,wallet = Wallet_System.Wallet()):
         print("Starting Main_Handler...")
         self._db_con = Database_System.DBConnection()
         self._Node_Info = Node_Info
@@ -83,7 +83,7 @@ class Main_Handler:
         self._miner = miner
         self._wallet = wallet
 ##        self._UMC_SI = Networking_System.Socket_Interface(TPort = 9000)
-        self._SI = Networking_System.Socket_Interface(Max_Connections)
+        self._SI = Networking_System.Socket_Interface(Max_Connections,TPort = self._Node_Info.Get_Address()[1])
         self._Network_Nodes = {}  #Address :Network_Node
         self._UMCs = {}  #UMC_Node lists list
         self._Time = Time_Keeper()
@@ -93,69 +93,77 @@ class Main_Handler:
         self._Chain = Chain_System.Chain(self._Mempool)
         if self._miner:
             self._miner.set_mempool(self._Mempool)
-            self.Restart_Miner()
+            self.restart_miner()
 
         self._Network_Nodes_Check_Timer = Ticker(300)    #Every 300 seconds check nodes
         self._Block_Sync_Timer = Ticker(300)
-        self._Rebroadcaster = Rebroadcaster()
+        self._rebroadcaster = Request_Queue()
+        self._requester = Request_Queue()
 
 
 
         self._Node_Commands = {
-            "Peer_Connected":self.On_Peer_Connected,
-            "Peer_Disconnected":self.On_Peer_Disconnected,
-            "Ping":self.On_Ping,
-            "Ping_Response":self.On_Ping_Response,
-            "Get_Node_Info":self.On_Get_Node_Info,
-            "Node_Info":self.On_Node_Info,
-            "Time_Sync":self.On_Time_Sync,
-            "Time_Sync_Response":self.On_Time_Sync_Response,
-            "Alert":self.On_Alert,
-            "Exit":self.On_Exit,
-            "Exit_Response":self.On_Exit_Response,
-            "Get_Peers":self.On_Get_Peers,
-            "Get_Peers_Response":self.On_Get_Peers_Response,
-            "Get_Address":self.On_Get_Address,
-            "Get_Address_Response":self.On_Get_Address_Response,
+            "Peer_Connected":self.on_peer_connected,
+            "Peer_Disconnected":self.on_peer_disconnected,
+            "Ping":self.on_ping,
+            "Ping_Response":self.on_ping_response,
+            "Get_Node_Info":self.on_get_node_info,
+            "Node_Info":self.on_node_info,
+            "Time_Sync":self.on_time_sync,
+            "Time_Sync_Response":self.on_time_sync_response,
+            "Alert":self.on_alert,
+            "Exit":self.on_exit,
+            "Exit_Response":self.on_exit_response,
+            "Get_Peers":self.on_get_peers,
+            "Get_Peers_Response":self.on_get_peers_response,
+            "Get_Address":self.on_get_address,
+            "Get_Address_Response":self.on_get_address_response,
 
             
-            "Inv":self.On_Inv,
-            "Get_Blocks":self.On_Get_Blocks,
-            "Get_Blocks_Full":self.On_Get_Blocks_Full,
-            "Blocks":self.On_Blocks,
-            "Transactions":self.On_Transactions,
+            "Inv":self.on_inv,
+            "Get_Blocks":self.on_get_blocks,
+            "Get_Blocks_Full":self.on_get_blocks_full,
+            "Blocks":self.on_blocks,
+            "Transactions":self.on_transactions,
                 }
         self._UMC_Commands = {
-            "Shutdown":self.On_UMC_Shutdown,
-            "Connect":self.On_UMC_Connect,
-            "Disconnect":self.On_UMC_Disconnect,
-            "Get_Authentication":self.On_UMC_Get_Authentication,
-            "Authentication":self.On_UMC_Authentication,
-            "Config":self.On_UMC_Config,
-            "Get_Connected_Addresses":self.On_UMC_Get_Connected_Addresses,
-            "Get_UTXOs":self.On_UMC_Get_UTXOs,
-            "Sign_Alert":self.On_UMC_Sign_Alert,
-            "Get_Wallet_Addresses":self.On_UMC_Get_Wallet_Addresses,
-            "New_Wallet_Address":self.On_UMC_New_Wallet_Address,
+            "Shutdown":self.on_UMC_shutdown,
+            "Connect":self.on_UMC_connect,
+            "Disconnect":self.on_UMC_disconnect,
+            "Get_Authentication":self.on_UMC_get_authentication,
+            "Authentication":self.on_UMC_authentication,
+            "Config":self.on_UMC_config,
+            "Get_Connected_Addresses":self.on_UMC_get_connected_addresses,
+            "Get_UTXOs":self.on_UMC_get_UTXOs,
+            "Sign_Alert":self.on_UMC_sign_alert,
+            "Get_Wallet_Addresses":self.on_UMC_get_wallet_addresses,
+            "New_Wallet_Address":self.on_UMC_new_wallet_address,
+            "Sign_Message":self.on_UMC_sign_message,
                 }
         print("Main_Handler started.")
 
-    def Main_Loop(self):
+    def main_loop(self):
         self._Exit = False
         while not self._Exit:
-            self.Process_SC_Messages()
-            self.Check_Network_Nodes()
-            self.Run_Rebroadcast()
-            self.Check_Sync_Blocks()
-            self.Check_Miner()
+            self.process_SC_messages()
+            self.check_network_nodes()
+            self.run_rebroadcast()
+            self.check_sync_blocks()
+            self.check_miner()
             time.sleep(1/60)
 
+        #Shutdown procedures
+        if self._miner:
+            self._miner.close()
+        print("Node has shutdown! Goodbye")
 
 
-    def Process_SC_Messages(self):
+
+    def process_SC_messages(self):
         Processed_Message_Number = 0
         while not self._SI.Output_Queue_Empty() and Processed_Message_Number < self._Max_SC_Messages:
             message = self._SI.Get_Item()
+            print("Process MESSAGE",message)
 
             if message["Command"] in self._UMC_Commands and message["Address"] in self._UMCs:
                 self._UMC_Commands[message["Command"]](message)  #Execute the relevant UMC command with the message as an argument
@@ -176,22 +184,22 @@ class Main_Handler:
     ################################
 
 
-    def On_Peer_Connected(self,Message):
-        self._Network_Nodes[Message["Payload"]["Address"]] = Network_System.Network_Node(Message["Payload"]["Address"])
+    def on_peer_connected(self,Message):
+        self._Network_Nodes[Message["Payload"]["Address"]] = Networking_System.Network_Node(Message["Payload"]["Address"])
         self._SI.Get_Node_Info(Message["Payload"]["Address"])
-    def On_Peer_Disconnected(self,Message):
+    def on_peer_disconnected(self,Message):
         self._Network_Nodes.pop(Message["Payload"]["Address"],None)
         self._UMCs.pop(Message["Payload"]["Address"],None)
 
-    def On_Ping(self,Message):
+    def on_ping(self,Message):
         self._SI.Ping_Response(Message["Address"],Message["Payload"]["Time_Sent"],self._Time.time())
-    def On_Ping_Response(self,Message):
+    def on_ping_response(self,Message):
         ping_time = Message["Payload"]["Remote_Time_Sent"]-Message["Payload"]["Time_Sent"]
         self._Network_Nodes[Message["Address"]].Set_Last_Ping(ping_time)
 
-    def On_Get_Node_Info(self,Message):
+    def on_get_node_info(self,Message):
         self._SI.Node_Info(Message["Address"],self._Node_Info.Get_Version(),self._Node_Info.Get_Type(),self._Node_Info.Get_Flags())
-    def On_Node_Info(self,Message):
+    def on_node_info(self,Message):
         if Message["Address"] in self._Network_Nodes:
             Node = self._Network_Nodes[Message["Address"]]
         else:
@@ -207,38 +215,38 @@ class Main_Handler:
             self._UMCs.pop(Message["Address"],None) #Remove node from UMCs if downgrading
             
 
-    def On_Time_Sync(self,Message):
+    def on_time_sync(self,Message):
         self._SI.Time_Sync_Response(Message["Address"],self._Time.time())
-    def On_Time_Sync_Response(self,Message):
+    def on_time_sync_response(self,Message):
         Node = self._Network_Nodes[Message["Address"]]
         Node.Set_Remote_Time(Message["Payload"]["Time"])
 
-    def On_Alert(self,Message):
+    def on_alert(self,Message):
         if Alert_System.Alert_User_Verify(self._db_con,self._Time.time(),Message["Payload"]["Username"],Message["Payload"]["Message"],Message["Payload"]["TimeStamp"],Message["Payload"]["Signature"],Message["Payload"]["Level"]):
             for Address in self._Nodes:
                 self._SI.Alert(Message["Payload"]["Username"],Message["Payload"]["Message"],Message["Payload"]["TimeStamp"],Message["Payload"]["Signature"],Message["Payload"]["Level"]-1)
         else:
             print("Invalid alert denied progress")
 
-    def On_Exit(self,Message):
+    def on_exit(self,Message):
         self._SI.Exit_Response(Message["Address"])
         self._SI.Kill_Connection(Message["Address"])
-    def On_Exit_Response(self,Message):
+    def on_exit_response(self,Message):
         self._SI.Kill_Connection(Message["Address"])
 
-    def On_Get_Peers(self,Message):
+    def on_get_peers(self,Message):
         Peers = []
         for Node in self._Network_Nodes:
             Peers.append(Node.Get_Address())
         self._SI.Get_Peers_Response(Message["Address"],Peers)
-    def On_Get_Peers_Response(self,Message):
+    def on_get_peers_response(self,Message):
         for peer in Message["Payload"]["Peers"]:
             self._db_con.Add_Peer(peer["IP"],peer["Port"],"",[],self._Time.time(),1,Update_If_Need = False)#Transfer peer without trust in type , flags etc
             
 
-    def On_Get_Address(self,Message):
+    def on_get_address(self,Message):
         self._SI.Get_Address_Response(Message["Address"])
-    def On_Get_Address_Response(self,Message):
+    def on_get_address_response(self,Message):
         self._Node_Info.Set_Address(Message["Payload"]["Address"])
 
     
@@ -251,16 +259,16 @@ class Main_Handler:
     #                              #
     ################################
 
-    def On_Inv(self,Message):
+    def on_inv(self,Message):
         for item in Message["Payload"]:
             if item["Type"] == "Block":
                 if not self._Chain.has_block(item["Payload"]):  #If not yet has block
-                    pass                                        #Add to request block queue
+                    self._requester.add_block_hash(item["Payload"])                          #Add to request block queue
             elif item["Type"] == "Transaction":
                 if not self._Mempool.has_tx(item["Payload"]):   #If does not currently have transaction
-                    pass                                        #Reqiest transaction
+                    self._requester.add_tx_hash(item["Payload"])                           #Reqiest transaction
 
-    def On_Get_Blocks(self,Message):  #On remote needs to update chain
+    def on_get_blocks(self,Message):  #On remote needs to update chain
         Found = False
         for block_hash in Message["Payload"]:                   # for each hash known to remote
             if self._db_con.Is_Best_Chain_Block(block_hash):
@@ -271,7 +279,7 @@ class Main_Handler:
         if not Found: # If remote blockchain is completely broken
             self._SI.Inv(Message["Address"],self._db_con.Find_Best_Chain_Section(self._db_con.Get_Best_Chain_Block(0)[0][0])) #If broken send next hashes from genesis.
                 
-    def On_Get_Blocks_Full(self,Message):               #On remote node wants full blocks
+    def on_get_blocks_full(self,Message):               #On remote node wants full blocks
         block_jsons = []
         for block_hash in Message["Payload"]:
             try:
@@ -281,25 +289,25 @@ class Main_Handler:
         self._SI.Blocks(Message["Address"],block_jsons)
             
 
-    def On_Blocks(self,Message):                        #When getting the full block data
+    def on_blocks(self,Message):                        #When getting the full block data
         for block_json in Message["Payload"]:
             block = Block_System.Block()
             block.import_json(block_json)
             if block.Verify(self._Time.time(),self._Chain.get_difficulty()):
                 self._Chain.add_block(block)            #Add block if it valid
-                self._Rebroadcaster.add_block_hash(block.Get_Block_Hash())
+                self._rebroadcaster.add_block_hash(block.Get_Block_Hash())
                 if self._Chain.get_highest_block_hash() == block.Get_Block_Hash():   #If this is the highest block
-                    self.Restart_Miner()                #Restart the miner if need be.
-                self.UMC_Block_Send(block)
+                    self.restart_miner()                #Restart the miner if need be.
+                self.UMC_block_send(block)
                 
 
-    def On_Transactions(self,Message):
+    def on_transactions(self,Message):
         for tx_json in Message["Payload"]:
             tx = Transaction_System.Transaction()
             tx.json_import(tx_json)
             if tx.Verify():
                 self._Mempool.add_transation_json(tx.Transaction_Hash(),tx_json,tx.Verify_Values())
-                self._Rebroadcaster.add_tx_hash(tx.Transaction_Hash())
+                self._rebroadcaster.add_tx_hash(tx.Transaction_Hash())
                 
             
                                     
@@ -310,11 +318,17 @@ class Main_Handler:
 
 
     #####################################################################
+    #
+    #       General maintainance
+    #
+    #
+    #
+    #####################################################################
              
                 
             
 
-    def Check_Network_Nodes(self):
+    def check_network_nodes(self):
         if self._Network_Nodes_Check_Timer.is_go():
             print("Checking nodes")
             self._Network_Nodes_Check_Timer.reset()
@@ -332,14 +346,36 @@ class Main_Handler:
                     self._SI.Kill_Connection(Node.Get_Address())
 
 
-    def Run_Rebroadcast(self):
-        if self._Rebroadcaster.is_go():
-            self._Rebroadcaster.reset()
+    def run_rebroadcast(self):
+        if self._rebroadcaster.is_go():
+            self._rebroadcaster.reset()
             for address in random.sample(list(self._Network_Nodes),min(8,len(self._Network_Nodes))):
-                self._SI.Inv(address,self._Rebroadcaster.get_queue(reset = False))
-            self._Rebroadcaster.reset_queue()
+                self._SI.Inv(address,self._rebroadcaster.get_queue(reset = False))
+            self._rebroadcaster.reset_queue()
 
-    def Check_Sync_Blocks(self):
+    def run_requester(self):
+        if self._requester.is_go():
+            self._requester.reset()
+            packets = {}
+            for item in self._requester.get_queue():
+                packets.setdefault((item["Type"],item["Address"]),[]).append(item["Payload"])
+            for key,values in packets.items():
+                target_type,address = key
+                if target_type == "Block":
+                    self._SI.Get_Blocks_Full(address,values)
+                elif target_type == "Transaction":
+                    self._SI.Transactions(address,values)       #ASDFHEFHWUEHFWUEFHWHEF
+                #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
+                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
+                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
+                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
+                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
+                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
+                    
+
+    
+
+    def check_sync_blocks(self):
         if self._Block_Sync_Timer.is_go():
             self._Block_Sync_Timer.reset()
             if self._db_con.Get_Highest_Work_Block()[0][5] < self._Time.time() - 24*3600:
@@ -348,18 +384,18 @@ class Main_Handler:
                     known_hashes = self._db_con.Find_Best_Known_Pattern(self._Chain.get_highest_block_hash())
                     self._SI.Get_Blocks(address,known_hashes)
 
-    def Check_Miner(self):
+    def check_miner(self):
         if self._miner:
             if self._miner.has_found_block():
                 block = self._miner.get_block()
 ##                print(block.export_json())
                 internal_block_message = {"Command":"Blocks",
-                                          "Address":("127.0.0.1",None),
+                                          "Address":self._Node_Info.Get_Address(),
                                           "Payload":[block.export_json()]}  #Includes generic address for localhost in case one wants to check if one created the block
-                self.On_Blocks(internal_block_message)           #Add block to chain normally. This also restarts the miner
+                self.on_blocks(internal_block_message)           #Add block to chain normally. This also restarts the miner
 
                     
-    def Restart_Miner(self):
+    def restart_miner(self):
         if self._miner:
             block_info = self._db_con.Get_Highest_Work_Block()
             self._miner.restart_mine(self._Time.time(),self._Chain.get_difficulty(),block_info[0][1]+1,block_info[0][0])  #Start mining on the highest block.
@@ -373,38 +409,30 @@ class Main_Handler:
     #                               #
     #################################
 
-    def UMC_Block_Send(self,block):
-        for UMC_Address,UMC in self._UMCs.values():
+    def UMC_block_send(self,block):
+        for UMC_Address,UMC in self._UMCs.items():
             if UMC.Get_Enable_Block_Send():
-                self._SI.Blocks(UMC_Address,[Block])
+                self._SI.Blocks(UMC_Address,[block.export_json()])
 
-##    def UMC_Check(self):
-##        while not self._UMC_SI.Output_Queue_Empty():            
-##            message = self._UMC_SI.Get_Item()
-##            
-##
-##            if message["Command"] in self._UMC_Commands:
-##                self._UMC_Commands[message["Command"]](message)
-##            elif message["Command"] in self._Node_Commands:
-##                self._Node_Commands[message["Command"]](message)  #Execute the relevant command with the message as an argument
-##
-    def On_UMC_Connect(self,message):
+
+
+    def on_UMC_connect(self,message):
         self._SI.Create_Connection(message["Payload"]["Address"])
-    def On_UMC_Disconnect(self,message):
+    def on_UMC_disconnect(self,message):
         self._SI.Create_Connection(message["Payload"]["Address"])
 
-    def On_UMC_Shutdown(self,message):
+    def on_UMC_shutdown(self,message):
         self._Exit = True
         print("MAIN HANDLER IS SHUTTING DOWN")
 
-    def On_UMC_Get_Authentication(self,message):
+    def on_UMC_get_authentication(self,message):
         salt = base64_System.str_to_b64(os.urandom(64))
-        SECRET_KEY = 'vql5apinpc0ehjpc1vzuhcncd4tl0heifaimg9heckfg8+q9sbpidryer+utu2gf/ify1b0fmsd8\nbzipih53tvryuj9u0kqnifcinc3vj75mvgnpianj+bu7wlj7vxwbgjwq/jyufkxtxpimh572woxx\ncha6nllvgacc05jekwe=\n'
+        SECRET_KEY = 'lolcat'
         key = hashlib.sha256((salt+SECRET_KEY).encode()).hexdigest()
         self._UMCs[message["Address"]].Set_Authentication(key)
         self._SI.Authentication_Challenge(message["Address"],salt)
 
-    def On_UMC_Authentication(self,message):
+    def on_UMC_authentication(self,message):
         if message["Payload"]["Hash"] == self._UMCs[message["Address"]].Get_Authentication():
             self._UMCs[message["Address"]].Set_Authentication(True)
             self._SI.Authentication_Outcome(message["Address"],True)
@@ -412,24 +440,21 @@ class Main_Handler:
             self._SI.Authentication_Outcome(message["Address"],False)
 
         
-##    def On_UMC_Connected(self,Message):
-##        self._UMCs[Message["Payload"]["Address"]] = UI_Main_Connection.U_Node(Message["Payload"]["Address"])
-##    def On_UMC_Disconnected(self,Message):
-##        self._UMCs.pop(Message["Payload"]["Address"],None)
-    def On_UMC_Config(self,Message):
+
+    def on_UMC_config(self,Message):
         self._UMCs[Message["Address"]].config(Message["Payload"])
 
-    def On_UMC_Get_Connected_Addresses(self,Message):
+    def on_UMC_get_connected_addresses(self,Message):
         self._UMC_SI.Connected_Addresses(Message["Address"],list(self._Network_Nodes))
 
-    def On_UMC_Get_UTXOs(self,Message):
-        UTXOs = self._DB.Get_UTXOs_Match(Message["Payload"])
+    def on_UMC_get_UTXOs(self,Message):
+        UTXOs = self._DB.Find_Address_UTXOs(Message["Payload"])
         self._UMC_SI.UTXOs(Message["Address"],UTXOs)
 
 
 ##############
 
-    def On_UMC_Sign_Alert(self,Message):
+    def on_UMC_sign_alert(self,Message):
         alert_details = Message["Payload"]
         success,signature = Alert_System.Sign_Alert(self._db_con, alert_details["Username"], alert_details["Message"], alert_details["TimeStamp"], alert_details["Level"])
         if success:
@@ -438,15 +463,15 @@ class Main_Handler:
             #Sig contains error message if failed
             self._SI.Error(Message["Address"],"Sign_Alert",error_info = signature)
 
-    def On_UMC_Get_Wallet_Addresses(self,Message):
+    def on_UMC_get_wallet_addresses(self,Message):
         self._SI.Wallet_Addresses(Message["Address"],self._wallet.Get_Addresses())
 
-    def On_UMC_New_Wallet_Address(self,Message):
+    def on_UMC_new_wallet_address(self,Message):
         #Generate new address and save wallet
         self._SI.Wallet_Addresses(Message["Address"],[self._wallet.Generate_New_Address()])
         self._wallet.Save_Wallet()
         
-    def On_Sign_Message(self,Message):
+    def on_UMC_sign_message(self,Message):
         if self._Wallet.has_address(Message["Payload"]["Wallet_Address"]):
             signature = self._Wallet.sign(Message["Payload"]["Wallet_Address"],Message["Payload"]["Sign_Message"])
             self._SI.Signed_Message(Message["Address"],signature)
@@ -459,10 +484,10 @@ class Main_Handler:
 
 
 
-def Miner_Run():
-    miner = Mining_System.Miner(None,Block_System.coinbase_tx(0),2)
-    m = Main_Handler(Miner = miner)
-    m.Main_Loop()
+def miner_run():
+    miner = Mining_System.Miner(None,Block_System.coinbase_tx(0),1)
+    m = Main_Handler(miner = miner)
+    m.main_loop()
 
 
 

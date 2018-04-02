@@ -1,11 +1,11 @@
-import socket,Threading_System,queue,Connection_System,time,recvall
+import socket,Threading_System,queue,Connection_System,time,recvall, threading
 #Address is a tuple of ("IP",Port)
 #Each "connection" has two socket pairs, Send and Recv, Send is the one the client formed, Recv is the one the client accepted.
 
                 
 
-def Create_Socket_Controller(Thread_Name,Command_Queue,Output_Queue,Max_Connections=15):
-    SC = Socket_Controller(Thread_Name,Command_Queue,Output_Queue,Max_Connections)
+def Create_Socket_Controller(Thread_Name,Command_Queue,Output_Queue,Max_Connections=15,TPort = 8000):
+    SC = Socket_Controller(Thread_Name,Command_Queue,Output_Queue,Max_Connections,TPort)
     SC.main()
 
 class Socket_Controller(Threading_System.Thread_Controller):
@@ -71,7 +71,8 @@ class Socket_Controller(Threading_System.Thread_Controller):
             while not return_queue.empty():
                 data = return_queue.get()      #Gets a new connection object
                 addr,conn = data
-
+                if addr in self._Addresses:
+                    self.Kill_Connection(addr)
                 self._Addresses.add(addr)
                 O_Return_Queue,I_Return_Queue = self.Add_Return_Queue(addr,"S"),self.Add_Return_Queue(addr,"R")
                 self.Create_Thread(addr+("S",),TargetCommand = Send_Thread,TargetArgs = (addr,conn,O_Return_Queue))
@@ -86,7 +87,7 @@ class Socket_Controller(Threading_System.Thread_Controller):
                 while not self._Return_Queues[Address].empty():
                     data = self._Return_Queues[Address].get()
                     Message,Data = data
-                    if Message == "Error":   
+                    if Message == "Error":
                         self.Kill_Connection(Base_Address)
                         self.Return_Connection_Failure(Base_Address)
                     else:
@@ -131,6 +132,7 @@ class Basic_Socket_Interface:
         self._SC_Out_Queue = queue.Queue()
         self._Command_Queue = Threading_System.Create_Controller()
         self._Command_Queue.put(("Controller","Create_Thread",("SC",Create_Socket_Controller,(self._SC_Out_Queue,Max_Connections,TPort))))
+        self._lock = threading.Lock()
 
     def Kill_Connection(self,Address):
         self._Command_Queue.put(("SC","Controller","Kill_Connection",(Address,)))
@@ -158,31 +160,49 @@ class Basic_Socket_Interface:
 
     def Get_Output_Queue(self):
         return self._SC_Out_Queue
+    
+    #Lock component to ensure correct order of access for certain program components
+    def get_lock_object(self):
+        return self._lock
+
+    def acquire_lock(self,blocking = True, timeout = -1):
+        return self._lock.acquire(blocking, timeout)
+
+    def release_lock(self):
+        self._lock.release()
+
+    def is_locked(self):
+        return self._lock.locked()
 
 class Socket_Interface_Extender:
     def Error(self,address,command, error_code = 2, error_info = "An error occured executing the command"):
+        #Generic Error message - Used to describe that an error occured and what command caused it.
         message = {"Command":"Error",
                    "Payload":{"Command":command,
                               "Error_Code":error_code,
-                              "Error_Info":error_info}
-    def Ping(self,Address,Time):  #Used to ping a node
+                              "Error_Info":error_info}}
+    def Ping(self,Address,Time):
+        #Used to ping a node, Time send is used to attempt to produce a ping statistic
         Ping_Message = {"Command":"Ping",
                        "Payload":{"Time_Sent":Time}}
         self.Send(Address,Ping_Message)
 
-    def Ping_Response(self,Address,Time_Sent,Time):  #Pong the node back
+    def Ping_Response(self,Address,Time_Sent,Time):
+        #Pong the node back, Time payload used to estimate a time for a ping.
         Ping_Response_Message = {"Command":"Ping_Response",
                                  "Payload":{"Time_Sent":Time_Sent,
                                             "Remote_Time_Sent":Time}}
         self.Send(Address,Ping_Response_Message)
         
 
-    def Get_Node_Info(self,Address):    #Get information about a node.
+    def Get_Node_Info(self,Address):
+        #Get information about a node such as version, flags and type
         Get_Node_Info_Message = {"Command":"Get_Node_Info",
                              "Payload":{}}
         self.Send(Address,Get_Node_Info_Message)
 
-    def Node_Info(self,Address,Version,Type,Flags):    #Returns the Node Info request
+    def Node_Info(self,Address,Version,Type,Flags):
+        #Returns the Node Info request - Type can be either UMC - Priviliged user to main connection, Node - Conventional node or other
         Node_Info_Message = {"Command":"Node_Info",
                              "Payload":{"Version":Version,
                                         "Type":Type,
@@ -190,18 +210,21 @@ class Socket_Interface_Extender:
         self.Send(Address,Node_Info_Message)
         
 
-    def Time_Sync(self,Address):    #Get a time sync from a node
+    def Time_Sync(self,Address):
+        #Get a time sync from a node. This requests the time of the remote node.
         Time_Sync_Message = {"Command":"Time_Sync",
                              "Payload":{}}
         self.Send(Address,Time_Sync_Message)
 
-    def Time_Sync_Response(self,Address,Time):   #respond to a time sync request
+    def Time_Sync_Response(self,Address,Time):
+        #respond to a time sync request. This takes the local time and sends it back.
         Time_Sync_Response_Message = {"Command":"Time_Sync_Response",
                                       "Payload":{"Time":Time}}
         self.Send(Address,Time_Sync_Response_Message)
         
 
-    def Alert(self,Address,Username,Message,TimeStamp,Signature,Current_Level):   #Alert the entire network using the message
+    def Alert(self,Address,Username,Message,TimeStamp,Signature,Current_Level):
+        #Alert the entire network using the message. Signed by a known user. TimeStamp to ensure can only be sent during that time.
         Alert_Message = {"Command":"Alert",
                          "Payload":{"Username":Username,
                                     "Message":Message,
@@ -211,33 +234,39 @@ class Socket_Interface_Extender:
         self.Send(Address,Alert_Message)
 
     def Exit(self,Address):
+        #Request the connection between this and the remote node to end.
         Exit_Message = {"Command":"Exit",
                         "Payload":{}}
         self.Send(Address,Exit_Message)
 
     def Exit_Response(self,Address):
+        #Acknowledge the node's desire to exit the connection.
         Exit_Response_Message = {"Command":"Exit_Response",
                                  "Payload":{}}
         self.Send(Address,Exit_Response_Message)
         
 
     def Get_Peers(self,Address):
+        #Get_Peers is used to obtain the known peers for a remote node.
         Get_Peers_Message = {"Command":"Get_Peers",
                              "Payload":{}}
         self.Send(Address,Get_Peers_Message)
 
-    def Get_Peers_Response(self,Address,Peers):  #Peers is list containing addresses of peers
+    def Get_Peers_Response(self,Address,Peers):
+        #Peers is list containing addresses of peers. Details on node type are not accepted
         Get_Peers_Response_Message = {"Command":"Get_Peers_Response",
                                       "Payload":{"Peers":Peers}}
         self.Send(Address,Get_Peers_Response_Message)
 
 
-    def Get_Address(self,Address):   # Get the address of ones own node
+    def Get_Address(self,Address):
+        # Get the address of ones own node by asking the remote node what the address the current node is seen under.
         Get_Address_Message = {"Command":"Get_Address",
                                "Payload":{}}
         self.Send(Address,Get_Address_Message)
 
     def Get_Address_Response(self,Address):
+        #Used to notify a node what address it is seen under.
         Get_Address_Response_Message = {"Command":"Get_Address_Response",
                                "Payload":{"Address":Address}}
         self.Send(Address,Get_Address_Response_Message)
@@ -246,26 +275,37 @@ class Socket_Interface_Extender:
     ################################################
 
     def Inv(self,Address,Inventory_List):
+        #Inventory provides a list of all items the node has to offer. This contains dictionaries of {Type,Payload} where payload typically is a hash.
         Inv_Message = {"Command":"Inv",
                        "Payload":Inventory_List}
         self.Send(Address,Inv_Message)
 
     def Get_Blocks(self,Address,Known_Block_Hashes_List):
+        #Get Blocks is used to syncronise the current node with the remote node by trying to find the next best block hash known by both nodes.
         Get_Blocks_Message = {"Command":"Get_Blocks",
                                "Payload":Known_Block_Hashes_List}
         self.Send(Address,Get_Blocks_Message)
 
     def Get_Blocks_Full(self,Address,Block_Hashes_List):
+        #Used to obtain full block data in json format. Block_Hashes_List contains the desired block hashes in order.
         Get_Blocks_Full_Message = {"Command":"Get_Blocks_Full",
                                    "Payload":Block_Hashes_List}
         self.Send(Address,Get_Blocks_Full_Message)
 
     def Blocks(self,Address,Blocks_List):
+        #Contains the ordered list of json blocks.
         Blocks_Message = {"Command":"Blocks",
                           "Payload":Blocks_List}
         self.Send(Address,Blocks_Message)
 
+    def Get_Transactions(self,Address,Transaction_Hash_List):
+        #Used to obtain the full json of the given transaction hashes.
+        Message = {"Command":"Get_Transactions",
+                   "Payload":Transaction_Hash_List}
+        self.Send(Address,Message)
+
     def Transactions(self,Address,Transactions_List):
+        #Used to send the full json of transactions.
         Transactions_Message = {"Command":"Transactions",
                                 "Payload":Transactions_List}
         self.Send(Address,Transactions_Message)
@@ -273,16 +313,19 @@ class Socket_Interface_Extender:
 
 class UMC_Interface_Extension:
     def Shutdown(self,Address):
+        #Request the Node to shutdown
         Message = {"Command":"Shutdown",
                             "Payload":{}}
         self.Send(Address,Message)
 
     def Connect(self,Address,Target_Address):
+        #Request the node to connect to the target address
         Message = {"Command":"Connect",
-                           "Payload":{"Address":Target_Address}}
+                    "Payload":{"Address":Target_Address}}
         self.Send(Address,Message)
 
     def Disconnect(self,Address,Target_Address):
+        #Request the node to disconnect from the target address
         Message = {"Command":"Disconnect",
                               "Payload":{"Address":Target_Address}}
         self.Send(Address,Message)
@@ -290,16 +333,19 @@ class UMC_Interface_Extension:
 #####################
 
     def Config(self,Address,Config):
+        #Used to define the configuration for the sending UMC on the node it is targeting
         Message = {"Command":"Config",
                    "Payload":Config}
         self.Send(Address,Message)
 
-    def Get_Connected_Addresses(self,Address,Target_Address):
+    def Get_Connected_Addresses(self,Address):
+        #Request the addresses the node is connected to.
         Message = {"Command":"Disconnect",
                    "Payload":{}}
         self.Send(Address,Message)
 
     def Connected_Addresses(self,Address,Addresses):
+        #Send back the list of connected addresses 
         Message = {"Command":"Connected_Addresses",
                    "Payload":Addresses}
         self.Send(Address,Message)
@@ -307,11 +353,13 @@ class UMC_Interface_Extension:
 #####################
 
     def Get_UTXOs(self,Address,Address_List):
+        #Get the UTXOs which match an address in the address list.
         Message = {"Command":"Get_UTXOs",
                    "Payload":Address_List}
         self.Send(Address,Message)
 
     def UTXOs(self,Address,UTXOs):
+        #Send a list of UTXOs
         Message = {"Command":"UTXOs",
                    "Payload":UTXOs}
         self.Send(Address,Message)
@@ -319,22 +367,26 @@ class UMC_Interface_Extension:
 ###################
         
     def Get_Authentication(self,Address):
+        #Request the start of an authentication procedure to become an authenticated UMC connection
         Message = {"Command":"Get_Authentication",
                    "Payload":{}}
         self.Send(Address,Message)
 
     def Authentication_Challenge(self,Address,salt):
+        #Send the challenge to the UMC
         Message = {"Command":"Authentication_Challenge",
                    "Payload":{"Salt":salt}}
         self.Send(Address,Message)
 
     def Authentication(self,Address,Hash):
+        #Return the hash to the node to prove the UMC has the secret key
         Message = {"Command":"Authentication",
                    "Payload":{"Hash":Hash}}
         self.Send(Address,Message)
 
     def Authentication_Outcome(self,Address,Outcome):
-        Message = {"Command":"Authentication",
+        #Respond to an authentication with the outcome of the authentication.
+        Message = {"Command":"Authentication_Outcome",
                    "Payload":{"Outcome":Outcome}}
         self.Send(Address,Message)
 
@@ -430,7 +482,7 @@ class UMC_Interface_Extension:
 
 
 
-class Socket_Interface(Basic_Socket_Interface,Socket_Interface_Extender):
+class Socket_Interface(Basic_Socket_Interface,Socket_Interface_Extender,UMC_Interface_Extension):
     def __binder(self):     #Used to form the new class
         pass            
 

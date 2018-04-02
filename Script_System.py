@@ -1,4 +1,4 @@
-import ecdsa,hashlib,codecs,base64_System
+import ecdsa,hashlib,codecs,base64_System,re,Wallet_System
 class Stack:
     def __init__(self,max_size = 100):
         self._contents = []
@@ -26,11 +26,28 @@ class Stack:
     
 class Script_Processor:
     def __init__(self):
+        self._locking_script = ""
+        self._unlocking_script = ""
+        self._hash_data = ""
+        self._address_re_pattern = "[a-f0-9]{64}"
+        self._public_key_pattern = "[a-zA-Z0-9/+]{64}"
         self.create_commands()
 
-    def process(self,Script):
+    def set_locking_script(self,locking_script):
+        self._locking_script = locking_script
+    def set_unlocking_script(self,unlocking_script):
+        self._unlocking_script = unlocking_script
+    def set_hash_data(self,data):
+        self._hash_data = data
+
+
+    #########################################
+        ######  Processing section #####
+    #########################################
+    def process(self):
         try:
-            self._Script_List = Script.split("  ")
+            script = self._unlocking_script+"  " + self._locking_script
+            self._Script_List = script.split("  ")
             self._stack = Stack()
             while len(self._Script_List) > 0:
                 item = self._Script_List.pop(0)
@@ -45,46 +62,53 @@ class Script_Processor:
             self._stack.flush()
             self._stack.push("False")
 
-        return self.Validate_Stack()
+        return self.validate_stack()
             
         
     def create_commands(self):
         self._Commands = {
-            "OP_DUP":self.OP_Dup,
-            "OP_HASH":self.OP_Hash,
-            "OP_VERIFY":self.OP_Verify,
-            "OP_EQUAL":self.OP_Equal,
-            "OP_DROP":self.OP_Drop,
-            "IF":self.If}
+            "OP_DUP":self.OP_DUP,
+            "OP_HASH":self.OP_HASH,
+            "OP_SIGVERIFY":self.OP_SIGVERIFY,
+            "OP_EQUAL":self.OP_EQUAL,
+            "OP_EQUALVERIFY":self.OP_EQUALVERIFY,
+            "OP_DROP":self.OP_DROP,
+            "IF":self.OP_IF}
 
-    def OP_Dup(self):
+    def OP_DUP(self):
         self._stack.push(self._stack.peek())
 
-    def OP_Hash(self):
+    def OP_HASH(self):
         hash_item = self._stack.pop()
         self._stack.push(hashlib.sha256(str(hash_item).encode()).hexdigest())
 
-    def OP_Verify(self):  # Signature public_key data
-        data = hashlib.sha256(str(self._stack.pop()).encode()).digest()
+    def OP_SIGVERIFY(self):  # Signature public_key on stack   -> front
         public_key = self._stack.pop()
-        sig = codecs.decode(self._stack.pop().encode(),"base64")
+        sig = base64_System.b64_to_bstr(self._stack.pop().encode())
         PuKO = ecdsa.VerifyingKey.from_string(base64_System.b64_to_bstr(public_key))
         try:
-            self._stack.push(PuKO.verify(sig,data))
+            PuKO.verify(sig,self._hash_data.encode())
         except Exception as e:
             print(e)
             self._stack.push("False")
         
 
-    def OP_Equal(self):
+    def OP_EQUAL(self):
         A,B = self._stack.pop(),self._stack.pop()
-        if not A == B:
+        if A == B:
+            self._stack.push("True")
+        else:
             self._stack.push("False")
+    def OP_EQUALVERIFY(self):
+        A,B = self._stack.pop(),self._stack.pop()
+        if A != B:
+            raise Exception("OP_EQUALVERIFY failed on "+str(A)+" and  "+str(B))
+        
 
-    def OP_Drop(self):  #Drop the top stack item
+    def OP_DROP(self):  #Drop the top stack item
         self._stack.pop()
 
-    def If(self):
+    def OP_IF(self):
         code_sections = [[]]
         item = "IF"#self._Script_List.pop(0)
         count = 0
@@ -120,17 +144,131 @@ class Script_Processor:
         print("IF SYSTEM:",self._Script_List)
 
 
-    def Validate_Stack(self):
+    def validate_stack(self):
         """ In order to be valid the script stack must finish with either empty or only 1/True strings left over. """
         x = []
         while self._stack.get_size() > 0:
-            if self._stack.pop() not in ["1","True"]:  # This is to prevent the system seeing arbitary items as True values
+            if str(self._stack.pop()) not in ["1","True"]:  # This is to prevent the system seeing arbitary items as True values
                 return False
         return True  # If the stack is empty or everything is True
-        
-        
 
+
+    #####################################################
+        ######  Solving/Identification section #####
+    #####################################################
+
+    def find_addresses(self):
+        return re.findall(self._address_re_pattern,self._locking_script)      #Identifies addresses as 64 charater long hex values, may get confused with other hashed values.
+    def contained_wallet_addresses(self,wallet_addresses):
+        return set(wallet_addresses).intersection(set(self.find_addresses()))
+    def for_wallet(self,wallet_addresses):
+        return len(self.contained_wallet_addresses(wallet_addresses)) > 0
+
+
+
+    def locking_script_type(self):
+        """
+        Script identification
+        This section will deal with the identification of script types using regex.
+        Locking script types: Type:[Locking script,solution]
+        0:["UNKNOWN","UKNOWN"]
+        ######1:["OP_DUP OP_HASH Address OP_EQUALVERIFY OP_SIGVERIFY","Signature Public_key"]
+        +------+---------------------------------------------------------------+---------------------------------+
+        | Type |                         Locking_Script                        |         Unlocking_Script        |
+        +------+---------------------------------------------------------------+---------------------------------+
+        |  0   |                            UNKNOWN                            |              UNKNOWN            |
+        |  1   | (OP_DUP OP_HASH Address OP_EQUALVERIFY OP_SIGVERIFY)*multiple | Signature Public_key * multiple |
+        |  4   |               public_key OP_SIGVERIFY* multiple               |       Signature* multiple       |
+        +------+---------------------------------------------------------------+---------------------------------+
+        """
+
+##        if re.match("^OP_DUP  OP_HASH  "+ self._address_re_pattern+"  OP_EQUALVERIFY  OP_SIGVERIFY$",self._locking_script):
+##            return "TYPE_1"
+        if re.match("^(OP_DUP  OP_HASH  "+ self._address_re_pattern+"  OP_EQUALVERIFY  OP_SIGVERIFY(  )?)+$",self._locking_script):
+            return "TYPE_1"
+        
+##        elif re.match("^"+self._public_key_pattern+"  OP_SIGVERIFY$",self._locking_script):
+##            return "TYPE_3"
+        elif re.match("^("+self._public_key_pattern+"  OP_SIGVERIFY(  )?)$",self._locking_script):
+            return "TYPE_4"
+
+
+
+        else:
+            return "TYPE_0"
+
+    def solve(self,locking_script_type,wallet):
+        """
+        Script solution
+        This section produces solutions for the various locking script types
+        """
+        if type(locking_script_type) == int:
+            locking_script_type = "TYPE_"+str(locking_script_type)
+    
+##        if locking_script_type == "TYPE_1": 
+##            address = self.find_addresses()[0]        #Finds the address, only a single address so first item
+##            signature = wallet.sign(address,self._hash_data)
+##            return signature + "  " + wallet.get_public_key(address)
+
+        if locking_script_type == "TYPE_1":
+            locking_scripts =[]
+            for section in re.findall("OP_DUP  OP_HASH  "+ self._address_re_pattern+"  OP_EQUALVERIFY  OP_SIGVERIFY",self._locking_script):
+                address = re.findall(self._address_re_pattern,section)[0]     #Finds address
+                signature = wallet.sign(address,self._hash_data)
+                locking_scripts.append(signature + "  " + wallet.get_public_key(address))
+            return "  ".join(locking_scripts)
+
+##        elif locking_script_type == "TYPE_3":
+##            public_key = re.findall(self._public_key_pattern,self._locking_script)[0]
+##            return wallet.sign(wallet.to_address(public_key),self._hash_data)
+
+        elif locking_script_type == "TYPE_4":
+            locking_scripts = []
+            for section in re.findall(self._public_key_pattern+"  OP_SIGVERIFY",self._locking_script):
+                public_key = re.findall(self._public_key_pattern,section)[0]
+                locking_scripts.append(wallet.sign(wallet.to_address(public_key),self._hash_data))
+            return "  ".join(locking_scripts)
+
+
+
+
+
+
+
+
+
+
+
+
+        
+def P2PKH_test():
+    w = Wallet_System.Wallet()
+    w.load_wallet()
+    x ="OP_DUP  OP_HASH  6dee6d35267bb441455bf045e5e55fe2493fcae52f6d86a0800a6f7749c4ad2c  OP_EQUALVERIFY  OP_SIGVERIFY"
+    y = "  ".join([x for i in range(3)])
+    s = Script_Processor()
+    s.set_locking_script(y)
+    unl = s.solve(1,w)
+    s.set_unlocking_script(unl)
+    print(s.process())
+        
+    
+def P2PK_test():
+    w = Wallet_System.Wallet()
+    w.load_wallet()
+    x ="ZkKfKHpMqIU2p3DqgKWAdf0qeSodoEN944b/1To7Ye6St2+VbjhY7fW+g5d0MiN6  OP_SIGVERIFY"
+    y = "  ".join([x for i in range(3)])
+    s = Script_Processor()
+    s.set_locking_script(y)
+    unl = s.solve(4,w)
+    s.set_unlocking_script(unl)
+    print(s.process())
     
 def if_test():
     s = Script_Processor()
-    s.process("False  True  IF  IF  IF  1  ELSE  2  ENDIF  1  2  ELSE  3  ENDIF  ELIF  2  3  4  ELSE  a  a  a  ENDIF")
+    s.set_unlocking_script("False  True")
+    s.set_locking_script("IF  IF  IF  1  ELSE  2  ENDIF  1  2  ELSE  x  ENDIF  ELIF  2  3  4  ELSE  a  a  a  ENDIF  x  OP_EQUALVERIFY")
+    print("Result:",s.process())
+
+
+

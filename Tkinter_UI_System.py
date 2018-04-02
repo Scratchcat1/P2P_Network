@@ -1,6 +1,6 @@
 import tkinter as tk
-import Auto_UI,time,hashlib
-
+import Auto_UI,Networking_System
+import time, hashlib
 class UI_Window:
     def __init__(self,root):
         #########################################################################
@@ -20,15 +20,17 @@ class UI_Window:
         self._main_frame.grid(row = 1,column = 1)
         self._ticker_frame.grid(row = 2,column = 1)
 
-        self._TARGET_ADDRESS = ("127.0.0.1",9000)
+        self._TARGET_ADDRESS = ("127.0.0.1",8000)
         self._message_queue = Message_Queue()
-        for i in range(100):
-            self._message_queue.put({"Command":i,"Address":i^2,"Payload":[i**2,i**3,i**4]})
+        self._node_info = Networking_System.Network_Node("127.0.0.1",Type = "UMC")
+        self._UMC = Networking_System.Socket_Interface(TPort = 9000)
+##        for i in range(100):
+##            self._message_queue.put({"Command":i,"Address":i^2,"Payload":[i**2,i**3,i**4]})
 
 
         self.create_menubar()
         self.reset_global_frame()
-        self.Home_Dialog()
+        self.home_dialog()
         self.run_ticker()
         self._root.mainloop()
 
@@ -68,7 +70,7 @@ class UI_Window:
         gen_menubar.add_command(label = "Connect_Dialog",command = lambda :self.connect_dialog())
         gen_menubar.add_command(label = "Disconnect_Dialog",command = lambda :self.disconnect_dialog())
         gen_menubar.add_command(label = "Shutdown_Dialog",command = lambda :self.shutdown_dialog())
-        gen_menubar.add_command(label = "Get_Connected_Addresses_Dialog",command = lambda :self.on_get_connected_addresses_dialog())
+        gen_menubar.add_command(label = "Get_Connected_Addresses_Dialog",command = lambda :self.get_connected_addresses_dialog())
         menubar.add_cascade(label = "Generic",menu = gen_menubar)
 
         UMC_menubar = tk.Menu(menubar, tearoff = 1)
@@ -80,21 +82,23 @@ class UI_Window:
 
     def wait_for_message(self,filter_func,wait_time = 2):
         start_time = time.time()
-        while start_time+wait_time < time.time():
-            Processed_Message_Number = 0
-            while not self._SI.Output_Queue_Empty() and Processed_Message_Number < 100:
-                message = self._SI.Get_Item()
-                if filter_func(message):
-                    return message
-                else:
-                    self._message_queue.put(message)
-                    Processed_Message_Number +=1
-            self._root.update_idletasks()
-        return {"Command":"Error",
-                "Address":("N/A",-1)
-                "Payload":{"Command":",
-                          "Error_Code":2,
-                          "Error_Info":"Message was not recieved in the allotted time"}
+        with self._UMC.get_lock_object():        #Obtains the lock object and acquires the lock
+            while start_time+wait_time > time.time():
+                Processed_Message_Number = 0
+                while not self._UMC.Output_Queue_Empty() and Processed_Message_Number < 100:    #Repeatedly attempts to process messages from the SI output queue
+                    message = self._UMC.Get_Item()
+    ##                print(message)
+                    if filter_func(message):    #Determins if the message is the one desired.
+                        return message
+                    else:
+                        self._message_queue.put(message)
+                        Processed_Message_Number +=1
+                self._root.update_idletasks()
+            return {"Command":"Error",
+                    "Address":("N/A",-1),
+                    "Payload":{"Command":str(filter_func),
+                              "Error_Code":2,
+                              "Error_Info":"Message was not recieved in the allotted time"}}
             
 
     def home_dialog(self):
@@ -149,13 +153,17 @@ class UI_Window:
 
     def on_UMC_connect_go(self,IP,Port,Password):
         self._UMC.Create_Connection((IP,Port))
-        time.sleep(0.1) #Wait for connection to form
+        time.sleep(0.5) #Wait for connection to form
+        self._UMC.Node_Info((IP,Port),self._node_info.Get_Version(),self._node_info.Get_Type(),self._node_info.Get_Flags())
+        time.sleep(0.1)
         self._UMC.Get_Authentication((IP,Port))
         auth_challenge = self.wait_for_message(lambda m:m["Address"] == (IP,Port) and m["Command"] == "Authentication_Challenge")
         self._UMC.Authentication((IP,Port),hashlib.sha256((auth_challenge["Payload"]["Salt"]+Password).encode()).hexdigest())
         auth_outcome = self.wait_for_message(lambda m:m["Address"] == (IP,Port) and m["Command"] == "Authentication_Outcome")
-        self.set_banner(auth_outcome["Payload"]["Outcome"])
-
+        self.set_banner("Authentication Sucess:"+str(auth_outcome["Payload"]["Outcome"]))
+        if auth_outcome["Payload"]["Outcome"]:
+            self._TARGET_ADDRESS = (IP,Port)
+            print(IP,":",Port, "is now the target node")
         #########
 
     def UMC_disconnect_dialog(self):
@@ -167,7 +175,10 @@ class UI_Window:
         self._UMC.Exit((IP,Port))
         exit_response = self.wait_for_message(lambda m:m["Address"] == (IP,Port) and m["Command"] == "Exit_Response")
         self._UMC.Kill_Connection((IP,Port))
-        self.display_message(exit_response)
+        if exit_response["Command"] == "Exit_Response":
+            self.set_banner("Sucessfully disconnected from "+str(IP)+":"+str(Port))
+        else:
+            self.set_banner("Failure to disconnect. You may not be connected to this node")
 
         #########
 
@@ -254,7 +265,7 @@ class UI_Window:
         form = Auto_UI.get_wallet_address_public_key_dialog(Go = self.on_get_wallet_address_public_key_go())
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
-    def get_wallet_address_public_key_go(self,wallet_address):
+    def on_get_wallet_address_public_key_go(self,wallet_address):
         self._UMC.Get_Wallet_Address_Public_Key(self._TARGET_ADDRESS,wallet_address)
         public_key_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Address_Public_Key")
         self.display_message(public_key_message)
@@ -266,7 +277,7 @@ class UI_Window:
         form = Auto_UI.get_wallet_address_private_key_dialog(Go = self.on_get_wallet_address_private_key_go())
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
-    def get_wallet_address_private_key_go(self,wallet_address):
+    def on_get_wallet_address_private_key_go(self,wallet_address):
         self._UMC.Get_Wallet_Address_Private_Key(self._TARGET_ADDRESS,wallet_address)
         private_key_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Address_Private_Key")
         self.display_message(private_key_message)
@@ -297,14 +308,25 @@ class UI_Window:
 
     def run_ticker(self):
         self.reset_ticker_frame()
-        self._message_queue.remove()
+        for i in range(100):    #process at maximum 100 messages before rendering.
+            locked = self._UMC.acquire_lock(blocking = False)    #Attempt to get a lock
+            if locked:
+                if not self._UMC.Output_Queue_Empty():
+                    message = self._UMC.Get_Item()  #obtains a single item
+                    self._message_queue.put(message)
+                    self._UMC.release_lock()
+                else:
+                    self._UMC.release_lock()
+                    break       #Break if no more messages are available
+                
         for i,message in enumerate(self._message_queue.peek()):
             text = str((message["Address"],message["Command"]))
             message_button = tk.Button(self._ticker_frame,text = text+" "*(206-len(text)),command = lambda message = message: self.display_message(message))
             message_button.grid(row = i,column = 0)
-        print("HI")
-
-        self._root.after(10*1000,self.run_ticker)
+            
+        print("Ticker queue length:",len(self._message_queue))
+        self._message_queue.remove()                #Remove old messages. After loop as these messages will have been displayed.
+        self._root.after(10*1000,self.run_ticker)   #Schedule ticker to run again in 10 seconds.
 
     def display_message(self,message):
         self.reset_main_frame()
@@ -323,6 +345,20 @@ class UI_Window:
                 payload_value_label.grid(row = 3+i,column = 1,sticky = tk.W)
         
 
+##if message["Command"] in ["Transaction","Block"]:
+##            payload = []
+##            for item in message["Payload"]:
+##                payload.append(json.loads(item))
+##        else:
+##            payload = message["Payload"]
+##
+##
+##
+##    def display_message_group_component(self,grouped_items, offset_row, recursion_level, offset_column=1):
+##        MAX_GROUP_COMPONENT_DISPLAY_RECURSION_LEVEL = 3
+##        for i,item in enumerate(grouped_item):
+##            if type(item) in [list,dict] and recursion_level <= MAX_GROUP_COMPONENT_DISPLAY_RECURSION_LEVEL:
+##                offset_row += self.display_message_group_component(item, offset_row, recursion_level + 1,offset_column + 1)
         
 
 
@@ -376,12 +412,6 @@ def Weight(frame):
     for y in range(30):
         tk.Grid.rowconfigure(frame, y, weight=1)
             
-
-
-
-
-
-
 
 
 

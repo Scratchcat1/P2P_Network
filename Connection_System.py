@@ -52,6 +52,7 @@ def Incoming_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,TPort = 8
         except Exception as e:
             print("Minor Incoming Connection error for ",Thread_Name,":",e)
     ICL.close()
+    print("HI")
 
 
 
@@ -74,7 +75,7 @@ def Outgoing_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,TPort = 8
                 Outgoing_Con = Connect(Address[0],CurrentTPort)
 ##                Incoming_Con,addr = ICL.accept()
 ##                Return_Queue.put(((addr[0],CurrentOPort),Outgoing_Con,Incoming_Con))
-                Return_Queue.put(((addr[0],CurrentTPort),Outgoing_Con))  # Return the connection to the main controller
+                Return_Queue.put(((Address[0],CurrentTPort),Outgoing_Con))  # Return the connection to the main controller
                 
 
         except Exception as e:

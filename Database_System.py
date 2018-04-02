@@ -64,18 +64,37 @@ class DBConnection:
         self._cur.execute("SELECT * FROM UTXO WHERE Transaction_Hash = %s AND Transaction_Index = %s",(Transaction_Hash,Transaction_Index))
         return self._cur.fetchall()
 
-    def Remove_Transaction(self,Transaction_Hash,Transaction_Index):
+    def Remove_Transaction(self,Transaction_Hash,Transaction_Index,auto_delete_address_utxo = True):
         self._cur.execute("SELECT * FROM UTXO WHERE Transaction_Hash = %s AND Transaction_Index = %s",(Transaction_Hash,Transaction_Index))
-        transaction = self._cur.fetchall()[0]  #Used to obtain the details of the transaction to be removed, this will be returned i.e. to store the changes a block has made
+        transaction = self._cur.fetchall()[0]                    #Used to obtain the details of the transaction to be removed, this will be returned i.e. to store the changes a block has made
+        if auto_delete_address_utxo:
+            self.Remove_Address_UTXOs(Transaction_Hash,Transaction_Index)
         self._cur.execute("DELETE FROM UTXO WHERE Transaction_Hash = %s AND Transaction_Index = %s",(Transaction_Hash,Transaction_Index))
         self._db_con.commit()
         return transaction
 
-    def Get_UTXOs_Match(self,Address_List):
-        self._cur.execute("SELECT * FROM UTXO")
-        UTXOs = self._cur.fetchall()
-        UTXOs = list(filter(lambda x:match_str_list(x[1],Address_List),UTXOs))
-        return UTXOs
+##    def Get_UTXOs_Match(self,Address_List):
+##        self._cur.execute("SELECT * FROM UTXO")
+##        UTXOs = self._cur.fetchall()
+##        UTXOs = list(filter(lambda x:match_str_list(x[1],Address_List),UTXOs))
+##        return UTXOs
+
+    def Link_Transaction_Addresses(self,Transaction_Hash,Transaction_Index,Addresses):  #Batch add addresses linked to a UTXO
+##        print(Transaction_Hash,Transaction_Index,Addresses)
+        batches = []
+        for address in Addresses:
+            batches.append((address,Transaction_Hash,Transaction_Index))
+        self._cur.executemany("INSERT INTO UTXO_Address VALUES(%s,%s,%s)",batches)
+        self._db_con.commit()
+
+    def Find_Address_UTXOs(self,address_list,min_output = 0):
+        self._cur.execute("SELECT UTXO.* FROM UTXO,UTXO_Address WHERE UTXO_Address.Address IN %s AND UTXO_Address.Transaction_Hash = UTXO.Transaction_Hash AND UTXO_Address.Transaction_Index = UTXO.Transaction_Index AND UTXO.Output > %s",(address_list,min_output))
+        return self._cur.fetchall()
+
+    def Remove_Address_UTXOs(self,tx_hash,tx_index):
+        self._cur.execute("DELETE FROM UTXO_Address WHERE Transaction_Hash = %s AND Transaction_Index = %s",(tx_hash,tx_index))
+        self._db_con.commit()
+
 
 
     ##### Blocks ######
@@ -196,15 +215,19 @@ class DBConnection:
 
     def ResetDatabase(self):
         self._cur.execute("SET FOREIGN_KEY_CHECKS = 0")  #Otherwise dropping tables will raise errors.
-        TABLES = ["Blocks","UTXO","Peers","Alert_Users"]
+        TABLES = ["Blocks","UTXO","UTXO_Address","Peers","Alert_Users"]
         for item in TABLES:  # Drops all tables
             self._cur.execute("DROP TABLE IF EXISTS {0}".format(item))
         
         self._cur.execute("CREATE TABLE Blocks(Block_Hash VARCHAR(64) PRIMARY KEY, Block_Number INT, Work VARCHAR(100), Sum_Work VARCHAR(100), Previous_Block_Hash VARCHAR(64), TimeStamp INT, On_Best_Chain INT)")
         #self._cur.execute("CREATE TABLE Leaf_Blocks(Block_Hash VARCHAR(32) PRIMARY KEY, Block_Number INT, Sum_Work INT)")
         self._cur.execute("CREATE TABLE UTXO(Transaction_Hash VARCHAR(64), Transaction TEXT, Transaction_Index INT, Output INT, Block_Hash VARCHAR(64),PRIMARY KEY (Transaction_Hash,Transaction_Index))")
+##        self._cur.execute("CREATE INDEX UTXO_Index ON UTXO(Transaction_Index)")
+        self._cur.execute("CREATE TABLE UTXO_Address(Address VARCHAR(64), Transaction_Hash VARCHAR(64), Transaction_Index INT, PRIMARY KEY(Address,Transaction_Hash,Transaction_Index))")#, FOREIGN KEY(Transaction_Hash) REFERENCES UTXO(Transaction_Hash), FOREIGN KEY(Transaction_Index) REFERENCES UTXO(Transaction_Index)
         self._cur.execute("CREATE TABLE Peers(IP VARCHAR(15) ,Port INT, Type TEXT, Flags TEXT, Last_Contact INT, Last_Ping INT, PRIMARY KEY(IP,Port))")
         self._cur.execute("CREATE TABLE Alert_Users(Username VARCHAR(16) PRIMARY KEY, Public_Key VARCHAR(200), Private_Key VARCHAR(200), Max_Level INT)")
+        
+        
         
         self._cur.execute("SET FOREIGN_KEY_CHECKS = 1")  # Reenables checks
         self._db_con.commit()

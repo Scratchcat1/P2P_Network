@@ -1,4 +1,4 @@
-import Merkle_Tree,Database_System,Transaction_System,json,hashlib
+import Merkle_Tree,Database_System,Transaction_System,json,hashlib,Script_System
 
 
 class Block:
@@ -180,22 +180,27 @@ class Block:
         return False
 
 
-    def Update_UTXO(self,Mempool):  #Remove inputs from utxo and add outputs to utxo
+    def Update_UTXO(self,Mempool):       #Remove inputs from utxo and add outputs to utxo
         print("Adding block",self._Block_Hash,"UTXOs to the UTXO")
-        old_utxos = []# this will contain all the old transaction details. If a rebase were necessary then the transaction details would be included with the block which changed them and would not need to be obtained from searching the blockchain
+        old_utxos = []                   # this will contain all the old transaction details. If a rebase were necessary then the transaction details would be included with the block which changed them and would not need to be obtained from searching the blockchain
+        script_processor = Script_System.Script_Processor()
         for tx in self.Get_Transaction_Objects():
-            Mempool.remove_tx(tx.Transaction_Hash()) #Removes the relevant transactions which are in the block
+            Mempool.remove_tx(tx.Transaction_Hash())            #Removes the relevant transactions which are in the block
             for tx_in in tx.Get_Inputs():
                 old_utxos.append(self._db_con.Remove_Transaction(tx_in["Prev_Tx"],tx_in["Index"]))
             for index,tx_out in enumerate(tx.Get_Outputs()):
+                script_processor.set_locking_script(tx_out["ScriptPubKey"])
                 self._db_con.Add_Transaction(tx.Transaction_Hash(),json.dumps(tx_out),index,tx_out["Value"],self._Block_Hash)
-                
+                self._db_con.Link_Transaction_Addresses(tx.Transaction_Hash(),index,script_processor.find_addresses())
         return old_utxos
 
     def Rollback_UTXO(self,old_utxos,Mempool):
         print("Removing block",self._Block_Hash,"UTXOs to the UTXO")
+        script_processor = Script_System.Script_Processor()
         for old_utxo in old_utxos:
+            script_processor.set_locking_script(old_utxo[1])
             self._db_con.Add_Transaction(*old_utxo)  #old_tx is dump of utxo, this adds it back in
+            self._db_con.Link_Transaction_Addresses(old_utxo[0],old_utxo[2],script_processor.find_addresses())
 
         for tx in self.Get_Transaction_Objects():
             if not tx.Is_Coinbase(): #Coinbase transactions should not be readded

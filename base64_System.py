@@ -6,7 +6,7 @@ def str_to_b64(string,to_bytestring = False):
     result = codecs.encode(string,"base64")
     if not to_bytestring:
         result = result.decode()
-    return result
+    return result[:-1]  #Remove \n
 
 def b64_to_bstr(base64_string):
     if not type(base64_string) == bytes:
@@ -17,6 +17,6 @@ def b64_to_bstr(base64_string):
 ##    return bstring_to_base64(string.encode(),to_bytestring)
 
 def b64_to_str(base64_string):
-    return base64_to_bstring(base64_string).decode()
+    return b64_to_bstr(base64_string).decode()
 
     

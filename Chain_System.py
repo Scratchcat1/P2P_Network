@@ -137,7 +137,7 @@ class Chain:
             diff = (2*7*24*3600)/(max(blocks[0][5],blocks[-1][5])-min(blocks[0][5],blocks[-1][5])) * sum_diff/len(blocks)   # TargetTime/actualTime * current difficulty, if T < a difficulty is reduced
         else:
             print("Using default difficulty")
-            diff = 2**256 - 2**240  #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
+            diff = 2**256 - 2**237  #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
 
         return diff
             
@@ -178,7 +178,7 @@ def sim():
     GENESIS_BLOCK_HASH = c.get_highest_block_hash()
     b = c.get_block(GENESIS_BLOCK_HASH)
     for n in range(1,5):
-        w,t,b = Block_System.test(bn= n, tim = n,pblk = b.Get_Block_Hash())
+        w,t,b = Block_System.test(bn= n, tim = n,pblk = b.Get_Block_Hash(),dif = c.get_difficulty())
         c.add_block(b)
         print("")
 
@@ -186,8 +186,10 @@ def sim():
     print("Generating side chain")
     
     b = c.get_block(GENESIS_BLOCK_HASH)
-    for n in range(1,60):
-        w,t,b = Block_System.test(bn= n, tim = n+100,pblk = b.Get_Block_Hash())
+    for n in range(1,3000):
+        if n% 100 == 0:
+            print("\n"*5,"Block",n,"\n")
+        w,t,b = Block_System.test(bn= n, tim = n+100,pblk = b.Get_Block_Hash(),dif = c.get_difficulty())
         c.add_block(b)
     return c
 

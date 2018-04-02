@@ -91,7 +91,12 @@ class Transaction:
                 prev_tx = Get_Prev_Transaction(self._db_con,tx_in["Prev_Tx"],tx_in["Index"])
                 if prev_tx["Lock_Time"] > Time:
                     raise Exception("Transaction output not yet unlocked")
-                if not SP.process(tx_in["Sig"]+ "  " + raw_sig + "  " + prev_tx["ScriptPubKey"]):
+
+                SP.set_unlocking_script(tx_in["Sig"])
+                SP.set_locking_script(prev_tx["ScriptPubKey"])
+                SP.set_hash_data(raw_sig)
+
+                if not SP.process():
                     raise Exception("Transaction input does not satisfy the locking script of the previous transaction")
             return True
         except:
