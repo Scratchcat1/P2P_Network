@@ -15,10 +15,8 @@ class Chain(autorepr.AutoRepr):
     ############################################
 
     def get_block_json(self,block_hash):
-        with get_container_file_object(self._db_con,"block",block_hash) as file_handle:
-            block_container = json.loads(file_handle.read())
-            block_json = block_container[block_hash]
-        return block_json
+        with HashTableIO() as file_handle:
+            return file_handle.read(("block",block_hash))
 
     def get_block(self,block_hash):
         block_dict = json.loads(self.get_block_json(block_hash))
@@ -27,29 +25,18 @@ class Chain(autorepr.AutoRepr):
         return block
 
     def add_block_json(self,block_hash,block_json):
-        with get_container_file_object(self._db_con,"block",block_hash) as file_handle:
-            block_container = json.loads(file_handle.read())
-        block_container[block_hash] = block_json
-        with get_container_file_object(self._db_con,"block",block_hash,mode = "w") as file_handle:
-            file_handle.write(block_container)
+        with HashTableIO() as file_handle:
+            file_handle.write(("block",block_hash),block_json)
             
         
 
     def get_block_rollback_json(self,block_hash):
-        with get_container_file_object(self._db_con,"rollback",block_hash) as file_handle:
-            rollback_container = json.loads(file_handle.read())
-        return json.loads(rollback_container[block_hash])
+        with HashTableIO() as file_handle:
+            return file_handle.read(("rollback",block_hash))
 
     def add_block_rollback(self,block_hash,rollback_data):
-        with get_container_file_object(self._db_con,"rollback",block_hash) as file_handle:
-            rollback_container = json.loads(file_handle.read())
-        rollback_container[block_hash] = json.dumps(rollback_data)
-        with get_container_file_object(self._db_con,"rollback",block_hash,mode = "w") as file_handle:
-            file_handle.write(rollback_container)
-
-            
-        with open(os.path.join("blocks","rollback_"+block_hash),"w") as file_handle:
-            file_handle.write(json.dumps(rollback_data))
+        with HashTableIO() as file_handle:
+            file_handle.write(("rollback",block_hash),rollback_data)
 
 
 
@@ -224,6 +211,11 @@ class HashTableIO:
 
     def _merge_key(self,key,merge_on = "_"):
         return merge_on.join([str(item) for item in key])
+
+    def __enter__(self):
+        return self
+    def __exit__(self,outcome_type,value,traceback):
+        return outcome_type,value,traceback
 
 
 
