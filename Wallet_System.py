@@ -1,6 +1,7 @@
 import json,ecdsa,hashlib,codecs,base64_System
+import autorepr
 
-class Wallet:
+class Wallet(autorepr.AutoRepr):
     def __init__(self,wallet_file = "wallet.json"):
         self._wallet_file = wallet_file
         self._wallet = {}
@@ -48,6 +49,14 @@ class Wallet:
         if type(value) != bytes:
             value = value.encode()
         return hashlib.sha256(value).hexdigest()
+
+
+    def __str__(self):
+        data = [
+            ("Wallet file",self._wallet_file),
+            ("Number of addresses",len(self._wallet)),
+            ]
+        return autorepr.str_repr(self,data)
 
     
     

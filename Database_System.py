@@ -138,7 +138,7 @@ class DBConnection:
         self._cur.execute("UPDATE Blocks SET On_Best_Chain = %s WHERE Block_Hash = %s",(value,block_hash))
         self._db_con.commit()
 
-    def Find_Best_Chain_Section(self,block_hash,number = 500):     #Find a the child blocks which are on the best chain as a list of hashes
+    def Find_Best_Chain_Section(self,block_hash,number = 500):     #Find a the child blocks which are on the best chain as a list of hashes (move upwards - away from genesis)
         self._cur.execute("SELECT Block_Number FROM Blocks WHERE Block_Hash = %s",(block_hash,))
         block_info = self._cur.fetchall()
         if len(block_info) == 0:

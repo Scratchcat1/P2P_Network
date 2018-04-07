@@ -1,6 +1,6 @@
-import Database_System,Block_System,json,os,Mempool_System
+import Database_System,Block_System,json,os,Mempool_System, autorepr, hashlib
 
-class Chain:
+class Chain(autorepr.AutoRepr):
     def __init__(self,Mempool):
         self._db_con = Database_System.DBConnection()
         self._Mempool = Mempool  #Contains a reference to the Mempool object
@@ -12,9 +12,12 @@ class Chain:
             self._highest_block_hash = ""
             self._difficulty = 1
 
+    ############################################
+
     def get_block_json(self,block_hash):
-        with open(os.path.join("blocks","block_"+block_hash)) as file_handle:
-            block_json = file_handle.read()
+        with get_container_file_object(self._db_con,"block",block_hash) as file_handle:
+            block_container = json.loads(file_handle.read())
+            block_json = block_container[block_hash]
         return block_json
 
     def get_block(self,block_hash):
@@ -24,9 +27,36 @@ class Chain:
         return block
 
     def add_block_json(self,block_hash,block_json):
-        with open(os.path.join("blocks","block_"+block_hash),"w") as file_handle:
-            file_handle.write(block_json)
+        with get_container_file_object(self._db_con,"block",block_hash) as file_handle:
+            block_container = json.loads(file_handle.read())
+        block_container[block_hash] = block_json
+        with get_container_file_object(self._db_con,"block",block_hash,mode = "w") as file_handle:
+            file_handle.write(block_container)
+            
+        
 
+    def get_block_rollback_json(self,block_hash):
+        with get_container_file_object(self._db_con,"rollback",block_hash) as file_handle:
+            rollback_container = json.loads(file_handle.read())
+        return json.loads(rollback_container[block_hash])
+
+    def add_block_rollback(self,block_hash,rollback_data):
+        with get_container_file_object(self._db_con,"rollback",block_hash) as file_handle:
+            rollback_container = json.loads(file_handle.read())
+        rollback_container[block_hash] = json.dumps(rollback_data)
+        with get_container_file_object(self._db_con,"rollback",block_hash,mode = "w") as file_handle:
+            file_handle.write(rollback_container)
+
+            
+        with open(os.path.join("blocks","rollback_"+block_hash),"w") as file_handle:
+            file_handle.write(json.dumps(rollback_data))
+
+
+
+
+
+
+    #############################################
     def add_block(self,block):
         self._db_con.Add_Block(block.Get_Block_Hash(),block.Get_Block_Number(),block.Get_Difficulty(),block.Get_Prev_Block_Hash(),block.Get_TimeStamp()) #Add block to db
         self.add_block_json(block.Get_Block_Hash(),json.dumps(block.Export()))   #Save block
@@ -40,17 +70,7 @@ class Chain:
             self.add_block_rollback(block.Get_Block_Hash(),rollback_data)
             if block.Get_Block_Number() % 2016 == 0:
                 self._difficulty = self.find_difficulty()
-                
-        
-
-    def get_block_rollback(self,block_hash):
-        with open(os.path.join("blocks","rollback_"+block_hash)) as file_handle:
-            rollback_json = file_handle.read()
-        return json.loads(rollback_json)
-
-    def add_block_rollback(self,block_hash,rollback_data):
-        with open(os.path.join("blocks","rollback_"+block_hash),"w") as file_handle:
-            file_handle.write(json.dumps(rollback_data))
+            
         
 
     #############################################
@@ -68,10 +88,10 @@ class Chain:
             self._highest_block_hash = new_block_hash
             return False
         else:
-            print("Alternate chain is now longest chain. Rebasing the chain...")
             return True  # new chain has overtaken old best chain so rebase needed
 
     def rebase_chain(self,new_block_hash):
+        print("Alternate chain is now longest chain. Rebasing the chain...")
         common_root = self.establish_common_root_block(self._highest_block_hash,new_block_hash)
         current_hash = self._highest_block_hash  #old highest block hash will be rolled back
 
@@ -111,35 +131,35 @@ class Chain:
 
     def find_difficulty(self):
         blocks = []
+        RETARGET_LENGTH = 1000
         current_hash = self.get_highest_block_hash()
 
-        block_number = 1  
-        while block_number % 2016 != 0: # Cycles until a section of 2016 blocks could be found, aligns on boundary ?
-            block_info = self._db_con.Get_Block(current_hash)
-            if len(block_info) == 0:
-                break  # No more blocks found to cancel
-            block_number = block_info[0][1]
-            current_hash = block_info[0][4]  # next hash
-            
-        for x in range(2016):   #Attempts to get 2016 blocks   THIS GOES FROM 2016n to 2016(n-1)!
-            block_info = self._db_con.Get_Block(current_hash)
-            if len(block_info) == 0:
-                break  # No more blocks found to cancel
-            blocks.append(block_info[0])
-            current_hash = block_info[0][4]  # next hash
+        current_block_number = self.Get_Block(current_hash)[0][1]
+        start_block_number = ((current_block_number//RETARGET_LENGTH)-2)*RETARGET_LENGTH    #Find the starting block number - shift down RETARGET_LENGTH lengths, then again as the Chain section will move up RETARGET_LENGTH values
+        blocks = Database_System.Find_Best_Chain_Section( Database_System.Get_Best_Chain_Block(start_block_number)) #Obtains the list of blocks for the last section of RETARGET_LENGTH blocks
 
         sum_diff = 0
         for block_info in blocks:
-            sum_diff += int(block_info[2])
+            sum_diff += int(block_info[2])  #Find the sum of the difficulty
             
 ##        print( blocks[0][5],blocks[-1][5])
         if len(blocks) > 0 and blocks[0][5] != blocks[-1][5]:
             diff = (2*7*24*3600)/(max(blocks[0][5],blocks[-1][5])-min(blocks[0][5],blocks[-1][5])) * sum_diff/len(blocks)   # TargetTime/actualTime * current difficulty, if T < a difficulty is reduced
         else:
             print("Using default difficulty")
-            diff = 2**256 - 2**237  #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
+            diff = 2**256 - 2**237          #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
 
         return diff
+
+    def __str__(self):
+        data = [
+            ("Highest Block Hash",self._highest_block_hash),
+            ("Difficulty",self._difficulty)]
+        return autorepr.str_repr(self,data)
+
+
+
+
             
             
             
@@ -149,7 +169,66 @@ def parent_set_add(db_con,hash_item,hash_set):
         hash_item = hash_item[0][4] #prev block hash
         hash_set.add(hash_item)
     return hash_item,hash_set
+
+
+def get_container_file_object(db_con, target, block_hash, block_container_size = 1000, mode = "r"):
+    # target sets if the rollback or block file should be selected
+    block_number = db_con.Get_Block(block_hash)[0][1]
+    filename = os.path.join("blocks",target+"_"+str(block_number//block_container_size))
+    if not os.path.exists(filename):
+        with open(filename,"w") as file_handle:
+            file_handle.write("{}")             #Create an empty dictionary in the file
+    return open(filename,mode)
+
+
+
+
+
+
+class HashTableIO:
+    """
+    An object to abstract storing dictionary values across multiple files
+    block_key_function is used to derive the key for the file to be opened. Form -> lambda key,kwargs: ~process function~. Must return a string to be used as the filename.
+    key for each component in the dictionary in a file is in the form "target_type_keya_keyb_keyc"...
+    """
+    def __init__(self,block_key_function = lambda key,kwargs:str(int(hashlib.sha256(key.encode()).hexdigest(),16)%kwargs.get("divisor",1000))):
+        self._block_key_function = block_key_function
+
+    def set_block_key_function(self,block_key_function):
+        self._block_key_function = block_key_function
+
+    def read(self,key,path = ("blocks",),**kwargs):
+        block_key = self._block_key_function(self._merge_key(key),kwargs)               #Derive the block key
+        filepath = os.path.join(*path,self._merge_key(("subsection",block_key)))        #Determine the filepath -> merge path + filename ( subsection_block_key)
+        
+        with open(filepath,"r") as file_handle:                                         #Open the file
+            container_json = json.loads(file_handle.read())                             #Load the contents using json
+        return container_json[self._merge_key(key)]                                     #Return the contents of the key used
     
+        
+    def write(self,key,data,path = ("blocks",),**kwargs):
+        block_key = self._block_key_function(self._merge_key(key),kwargs)               #Derive the block key
+        filepath = os.path.join(*path,self._merge_key(("subsection",block_key)))        #Determine the filepath -> merge path + filename ( subsection_block_key)
+        
+        if os.path.exists(filepath):
+            with open(filepath,"r") as file_handle:                                     #Should the file exist then load the dictionary from it
+                file_data = json.loads(file_handle.read())
+        else:
+            file_data = {}                                                              #If the file does not exist assume the contents were an empty dictionary
+        file_data[self._merge_key(key)] = data
+        
+        with open(filepath,"w") as file_handle:
+            file_handle.write(json.dumps(file_data))
+            
+                
+
+    def _merge_key(self,key,merge_on = "_"):
+        return merge_on.join([str(item) for item in key])
+
+
+
+
+
 def Generate_Genesis_Block():
     db_con = Database_System.DBConnection()
     db_con.ResetDatabase()

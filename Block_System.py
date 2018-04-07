@@ -1,7 +1,7 @@
 import Merkle_Tree,Database_System,Transaction_System,json,hashlib,Script_System
+import autorepr
 
-
-class Block:
+class Block(autorepr.AutoRepr):
     def __init__(self,Difficulty = -1,Block_Number = -1, Prev_Block_Hash = "",db_con = None):
         self._Block_Hash = ""
         self._Difficulty = Difficulty
@@ -209,9 +209,20 @@ class Block:
 ##                print(tx.Transaction_Hash(),index)
 ##                print(self._Block_Hash)
                 self._db_con.Remove_Transaction(tx.Transaction_Hash(),index)
+
+
                 
-        
-    
+    def __str__(self):
+        data = [
+            ("Block_Hash",self._Block_Hash),
+            ("Difficulty",self._Difficulty),
+            ("Merkle_Root",self._Merkle_Root),
+            ("Prev_Block_Hash",self._Prev_Block_Hash),
+            ("Transactions",len(self._Transactions)),
+            ("TimeStamp",self._TimeStamp),
+            ("Nonce",self._Nonce)
+            ]
+        return autorepr.str_repr(self,data)
     
     
 

@@ -1,6 +1,6 @@
-import Database_System,Script_System,json,copy,hashlib
+import Database_System,Script_System,json,copy,hashlib, autorepr
 
-class Transaction:
+class Transaction(autorepr.AutoRepr):
     def __init__(self,db_con = None):
         self._in = []
         self._out = []
@@ -130,11 +130,17 @@ class Transaction:
         raw_sig = hashlib.sha256(json.dumps(Transaction_Copy,sort_keys = True).encode()).hexdigest()
         return raw_sig
 
-            
-
-
+        
     def Transaction_Hash(self):
         return hashlib.sha256(self.json_export().encode()).hexdigest()
+
+
+    def __str__(self):
+        data = [
+            ("Inputs",self._in),
+            ("Outputs",self._out),
+            ("TimeStamp",self._TimeStamp)]
+        return autorepr.str_repr(self,data)
             
 
 
