@@ -1,4 +1,4 @@
-import Database_System,Block_System,json,os,Mempool_System, autorepr, hashlib
+import Database_System,Block_System,json,os,Mempool_System, autorepr, hashlib,math
 
 class Chain(autorepr.AutoRepr):
     def __init__(self,Mempool):
@@ -30,7 +30,7 @@ class Chain(autorepr.AutoRepr):
             
         
 
-    def get_block_rollback_json(self,block_hash):
+    def get_block_rollback(self,block_hash):
         with HashTableIO() as file_handle:
             return file_handle.read(("rollback",block_hash))
 
@@ -100,6 +100,7 @@ class Chain(autorepr.AutoRepr):
         hash_a_set = set()
         hash_b_set = set()
         while len(hash_a_set.intersection(hash_b_set)) == 0:
+            print(hash_a,hash_b)
             hash_a,hash_a_set = parent_set_add(self._db_con,hash_a,hash_a_set)
             hash_b,hash_b_set = parent_set_add(self._db_con,hash_b,hash_b_set)
         return list(hash_a_set.intersection(hash_b_set))[0] # common root
@@ -111,7 +112,7 @@ class Chain(autorepr.AutoRepr):
             path.append(current_block_hash)
         return path[:-1]  #This removes the target_block_hash from the list
 
-    ###################################################
+    ############
 
     def get_difficulty(self):
         return self._difficulty
@@ -119,24 +120,33 @@ class Chain(autorepr.AutoRepr):
     def find_difficulty(self):
         blocks = []
         RETARGET_LENGTH = 1000
+        DEFAULT_TARGET = 2**239
         current_hash = self.get_highest_block_hash()
 
-        current_block_number = self.Get_Block(current_hash)[0][1]
-        start_block_number = ((current_block_number//RETARGET_LENGTH)-2)*RETARGET_LENGTH    #Find the starting block number - shift down RETARGET_LENGTH lengths, then again as the Chain section will move up RETARGET_LENGTH values
-        blocks = Database_System.Find_Best_Chain_Section( Database_System.Get_Best_Chain_Block(start_block_number)) #Obtains the list of blocks for the last section of RETARGET_LENGTH blocks
-
+        current_block_number = self._db_con.Get_Block(current_hash)[0][1]
+        start_block_number = max(((current_block_number//RETARGET_LENGTH)-2)*RETARGET_LENGTH,0)    #Find the starting block number - shift down RETARGET_LENGTH lengths, then again as the Chain section will move up RETARGET_LENGTH values
+        block_hashes = self._db_con.Find_Best_Chain_Section( self._db_con.Get_Best_Chain_Block(start_block_number)[0][0]) #Obtains the list of blocks for the last section of RETARGET_LENGTH blocks
+        
+        blocks = [self._db_con.Get_Block(block_hash)[0] for block_hash in block_hashes]
         sum_diff = 0
         for block_info in blocks:
             sum_diff += int(block_info[2])  #Find the sum of the difficulty
             
-##        print( blocks[0][5],blocks[-1][5])
+
         if len(blocks) > 0 and blocks[0][5] != blocks[-1][5]:
-            diff = (2*7*24*3600)/(max(blocks[0][5],blocks[-1][5])-min(blocks[0][5],blocks[-1][5])) * sum_diff/len(blocks)   # TargetTime/actualTime * current difficulty, if T < a difficulty is reduced
+            time_per_block = (max(blocks[0][5],blocks[-1][5])-min(blocks[0][5],blocks[-1][5]))/len(blocks)
+            print("Toime per block",time_per_block)
+            avg_diff = int(sum_diff/len(blocks))
+            target =  time_per_block/60 * avg_diff   # actualTime/TargetTime * current difficulty, if T < a difficulty/target is reduced
         else:
             print("Using default difficulty")
-            diff = 2**256 - 2**237          #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
-
+            target = DEFAULT_TARGET          #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
+        diff = int(2**256 - min(target,DEFAULT_TARGET))
+        print("Target is 2**",math.log(target,2)," Difficulty is 2**",math.log(diff,2))
         return diff
+
+
+    ##########
 
     def __str__(self):
         data = [
@@ -151,6 +161,7 @@ class Chain(autorepr.AutoRepr):
             
             
 def parent_set_add(db_con,hash_item,hash_set):
+    print(hash_item)
     hash_item = db_con.Get_Block(hash_item)
     if len(hash_item) > 0:
         hash_item = hash_item[0][4] #prev block hash
@@ -158,21 +169,21 @@ def parent_set_add(db_con,hash_item,hash_set):
     return hash_item,hash_set
 
 
-def get_container_file_object(db_con, target, block_hash, block_container_size = 1000, mode = "r"):
-    # target sets if the rollback or block file should be selected
-    block_number = db_con.Get_Block(block_hash)[0][1]
-    filename = os.path.join("blocks",target+"_"+str(block_number//block_container_size))
-    if not os.path.exists(filename):
-        with open(filename,"w") as file_handle:
-            file_handle.write("{}")             #Create an empty dictionary in the file
-    return open(filename,mode)
+##def get_container_file_object(db_con, target, block_hash, block_container_size = 1000, mode = "r"):
+##    # target sets if the rollback or block file should be selected
+##    block_number = db_con.Get_Block(block_hash)[0][1]
+##    filename = os.path.join("blocks",target+"_"+str(block_number//block_container_size))
+##    if not os.path.exists(filename):
+##        with open(filename,"w") as file_handle:
+##            file_handle.write("{}")             #Create an empty dictionary in the file
+##    return open(filename,mode)
 
 
 
 
 
 
-class HashTableIO:
+class HashTableIO(autorepr.AutoRepr):
     """
     An object to abstract storing dictionary values across multiple files
     block_key_function is used to derive the key for the file to be opened. Form -> lambda key,kwargs: ~process function~. Must return a string to be used as the filename.
@@ -186,7 +197,8 @@ class HashTableIO:
 
     def read(self,key,path = ("blocks",),**kwargs):
         block_key = self._block_key_function(self._merge_key(key),kwargs)               #Derive the block key
-        filepath = os.path.join(*path,self._merge_key(("subsection",block_key)))        #Determine the filepath -> merge path + filename ( subsection_block_key)
+        merged_path = path + (self._merge_key(("subsection",block_key)),)
+        filepath = os.path.join(*merged_path)                                            #Determine the filepath -> merge path + filename ( subsection_block_key)
         
         with open(filepath,"r") as file_handle:                                         #Open the file
             container_json = json.loads(file_handle.read())                             #Load the contents using json
@@ -195,17 +207,17 @@ class HashTableIO:
         
     def write(self,key,data,path = ("blocks",),**kwargs):
         block_key = self._block_key_function(self._merge_key(key),kwargs)               #Derive the block key
-        filepath = os.path.join(*path,self._merge_key(("subsection",block_key)))        #Determine the filepath -> merge path + filename ( subsection_block_key)
-        
+        merged_path = path + (self._merge_key(("subsection",block_key)),)
+        filepath = os.path.join(*merged_path)                                            #Determine the filepath -> merge path + filename ( subsection_block_key)
         if os.path.exists(filepath):
             with open(filepath,"r") as file_handle:                                     #Should the file exist then load the dictionary from it
                 file_data = json.loads(file_handle.read())
         else:
             file_data = {}                                                              #If the file does not exist assume the contents were an empty dictionary
-        file_data[self._merge_key(key)] = data
+        file_data[self._merge_key(key)] = data                                          #Add the new data
         
         with open(filepath,"w") as file_handle:
-            file_handle.write(json.dumps(file_data))
+            file_handle.write(json.dumps(file_data))                                    #Rewrite the file
             
                 
 

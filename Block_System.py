@@ -176,7 +176,7 @@ class Block(autorepr.AutoRepr):
                 self._Block_Hash = block_hash
                 return block_hash
             
-        print("Failed to find hash after ",iterations,"iterations")
+##        print("Failed to find hash after ",iterations,"iterations")
         return False
 
 
@@ -215,6 +215,7 @@ class Block(autorepr.AutoRepr):
     def __str__(self):
         data = [
             ("Block_Hash",self._Block_Hash),
+            ("Block_Number",self._Block_Number),
             ("Difficulty",self._Difficulty),
             ("Merkle_Root",self._Merkle_Root),
             ("Prev_Block_Hash",self._Prev_Block_Hash),

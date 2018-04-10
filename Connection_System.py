@@ -52,7 +52,7 @@ def Incoming_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,TPort = 8
         except Exception as e:
             print("Minor Incoming Connection error for ",Thread_Name,":",e)
     ICL.close()
-    print("HI")
+    print("Incoming connection handler has shutdown")
 
 
 
@@ -81,3 +81,4 @@ def Outgoing_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,TPort = 8
         except Exception as e:
             print("Outgoing connection error for ",Thread_Name,":",e)
     ICL.close()
+    print("Outgoing connection handler has shutdown")

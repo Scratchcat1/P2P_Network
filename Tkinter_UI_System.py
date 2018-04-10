@@ -386,7 +386,7 @@ class Message_Queue:
         self._max_size = max_size
 
     def put(self,message):
-        while len(self._queue) >= self._max_size and max_size > 0:
+        while len(self._queue) >= self._max_size and self._max_size > 0:
             self._queue.pop(0)
         self._queue.append(message)
 

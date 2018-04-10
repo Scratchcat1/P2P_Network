@@ -148,6 +148,7 @@ class Main_Handler:
             self.process_SC_messages()
             self.check_network_nodes()
             self.run_rebroadcast()
+            self.run_requester()
             self.check_sync_blocks()
             self.check_miner()
             time.sleep(1/60)
@@ -155,6 +156,7 @@ class Main_Handler:
         #Shutdown procedures
         if self._miner:
             self._miner.close()
+        self._SI.SC_Exit()
         print("Node has shutdown! Goodbye")
 
 
@@ -263,21 +265,23 @@ class Main_Handler:
         for item in Message["Payload"]:
             if item["Type"] == "Block":
                 if not self._Chain.has_block(item["Payload"]):  #If not yet has block
-                    self._requester.add_block_hash(item["Payload"])                          #Add to request block queue
+                    self._requester.add_block_hash(item["Payload"],Message["Address"])              #Add to request block queue
             elif item["Type"] == "Transaction":
                 if not self._Mempool.has_tx(item["Payload"]):   #If does not currently have transaction
-                    self._requester.add_tx_hash(item["Payload"])                           #Reqiest transaction
+                    self._requester.add_tx_hash(item["Payload"],Message["Address"])                 #Request transaction
 
     def on_get_blocks(self,Message):  #On remote needs to update chain
         Found = False
         for block_hash in Message["Payload"]:                   # for each hash known to remote
             if self._db_con.Is_Best_Chain_Block(block_hash):
-                self._SI.Inv(Message["Address"],self._db_con.Find_Best_Chain_Section(block_hash))  #Send next best hashes once found best chain connection
+                inventory = [{"Type":"Block","Payload":payload} for payload in self._db_con.Find_Best_Chain_Section(block_hash)]    #Convert hashes into inventory messages
+                self._SI.Inv(Message["Address"],inventory)  #Send next best hashes once found best chain connection
                 Found = True
                 break
             
         if not Found: # If remote blockchain is completely broken
-            self._SI.Inv(Message["Address"],self._db_con.Find_Best_Chain_Section(self._db_con.Get_Best_Chain_Block(0)[0][0])) #If broken send next hashes from genesis.
+            inventory = [{"Type":"Block","Payload":payload} for payload in self._db_con.Find_Best_Chain_Section(self._db_con.Get_Best_Chain_Block(0)[0][0])]    #Convert hashes into inventory messages
+            self._SI.Inv(Message["Address"],inventory)      #If broken send next hashes from genesis.
                 
     def on_get_blocks_full(self,Message):               #On remote node wants full blocks
         block_jsons = []
@@ -293,9 +297,10 @@ class Main_Handler:
         for block_json in Message["Payload"]:
             block = Block_System.Block()
             block.import_json(block_json)
-            if block.Verify(self._Time.time(),self._Chain.get_difficulty()):
+            if not self._Chain.has_block(block.Get_Block_Hash()) and block.Verify(self._Time.time(),block.Get_Difficulty()):      ################################################# USING BLOCK DIFFICULTY AS CHAIN MAY NOT NOTICE DIFFICULTY CHANGE OvER TIME    ################
                 self._Chain.add_block(block)            #Add block if it valid
                 self._rebroadcaster.add_block_hash(block.Get_Block_Hash())
+##                print(self._Chain.get_highest_block_hash(),block.Get_Prev_Block_Hash(),block.Get_Block_Number(),block.Get_Difficulty())
                 if self._Chain.get_highest_block_hash() == block.Get_Block_Hash():   #If this is the highest block
                     self.restart_miner()                #Restart the miner if need be.
                 self.UMC_block_send(block)
@@ -305,7 +310,7 @@ class Main_Handler:
         for tx_json in Message["Payload"]:
             tx = Transaction_System.Transaction()
             tx.json_import(tx_json)
-            if tx.Verify():
+            if not self._Mempool.has_tx(tx.Transaction_Hash()) and tx.Verify():
                 self._Mempool.add_transation_json(tx.Transaction_Hash(),tx_json,tx.Verify_Values())
                 self._rebroadcaster.add_tx_hash(tx.Transaction_Hash())
                 
@@ -340,9 +345,9 @@ class Main_Handler:
                         self._SI.Create_Connection((peer[0],peer[1]))   #Create connection to node
                 
             for Node in self._Network_Nodes.values():
-                if Node.Get_Last_Contact() > 20*60:
+                if Node.Get_Last_Contact() < time.time() - 20*60:
                     self._SI.Ping(Node.Get_Address(),self._Time.time())  #Ping to keep connection alive
-                if Node.Get_Last_Contact() > 90*60:
+                if Node.Get_Last_Contact() < time.time() - 90*60:
                     self._SI.Kill_Connection(Node.Get_Address())
 
 
@@ -364,7 +369,7 @@ class Main_Handler:
                 if target_type == "Block":
                     self._SI.Get_Blocks_Full(address,values)
                 elif target_type == "Transaction":
-                    self._SI.Transactions(address,values)       #ASDFHEFHWUEHFWUEFHWHEF
+                    self._SI.Get_Transactions(address,values)       #ASDFHEFHWUEHFWUEFHWHEF
                 #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
                     #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
                     #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
@@ -419,7 +424,9 @@ class Main_Handler:
     def on_UMC_connect(self,message):
         self._SI.Create_Connection(message["Payload"]["Address"])
     def on_UMC_disconnect(self,message):
-        self._SI.Create_Connection(message["Payload"]["Address"])
+        #Potentially exit this in a more graceful manner
+        print(message["Payload"]["Address"])
+        self._SI.Kill_Connection(message["Payload"]["Address"])
 
     def on_UMC_shutdown(self,message):
         self._Exit = True
@@ -445,11 +452,11 @@ class Main_Handler:
         self._UMCs[Message["Address"]].config(Message["Payload"])
 
     def on_UMC_get_connected_addresses(self,Message):
-        self._UMC_SI.Connected_Addresses(Message["Address"],list(self._Network_Nodes))
+        self._SI.Connected_Addresses(Message["Address"],list(self._Network_Nodes))
 
     def on_UMC_get_UTXOs(self,Message):
         UTXOs = self._DB.Find_Address_UTXOs(Message["Payload"])
-        self._UMC_SI.UTXOs(Message["Address"],UTXOs)
+        self._SI.UTXOs(Message["Address"],UTXOs)
 
 
 ##############

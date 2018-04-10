@@ -50,7 +50,7 @@ class Socket_Controller(Threading_System.Thread_Controller):
             Target,Command,Arguments = data[0],data[1],data[2]
             if Target == "Controller":
                 if Command == "Kill_Connection":
-                    self.Kill_Connection(*Arguments)
+                    self.Kill_Connection(*tuple(Arguments))
                 elif Command == "Create_Connection":
                     self.Create_Connection(*Arguments)
                 elif Command == "GetAddresses":
@@ -130,27 +130,30 @@ class Socket_Controller(Threading_System.Thread_Controller):
 class Basic_Socket_Interface:
     def __init__(self,Max_Connections = 15,TPort = 8000):
         self._SC_Out_Queue = queue.Queue()
-        self._Command_Queue = Threading_System.Create_Controller()
-        self._Command_Queue.put(("Controller","Create_Thread",("SC",Create_Socket_Controller,(self._SC_Out_Queue,Max_Connections,TPort))))
+        self._Command_Queue = queue.Queue()
+        sc_thread = threading.Thread(target = Create_Socket_Controller ,args = ("SC",self._Command_Queue,self._SC_Out_Queue,Max_Connections,TPort))
+        sc_thread.start()
+##        self._Command_Queue = Threading_System.Create_Controller()
+##        self._Command_Queue.put(("Controller","Create_Thread",("SC",Create_Socket_Controller,(self._SC_Out_Queue,Max_Connections,TPort))))
         self._lock = threading.Lock()
 
     def Kill_Connection(self,Address):
-        self._Command_Queue.put(("SC","Controller","Kill_Connection",(Address,)))
+        self._Command_Queue.put(("Controller","Kill_Connection",(Address,)))
 
     def Create_Connection(self,Address):
-        self._Command_Queue.put(("SC","Controller","Create_Connection",(Address,)))
+        self._Command_Queue.put(("Controller","Create_Connection",(Address,)))
 
     def GetAddresses(self):
-        self._Command_Queue.put(("SC","Controller","GetAddresses",()))
+        self._Command_Queue.put(("Controller","GetAddresses",()))
 
     def Send(self,Address,Payload):
-        self._Command_Queue.put(("SC",Address+("S",),"Send",Payload))
+        self._Command_Queue.put((Address+("S",),"Send",Payload))
 
     def SC_Reset(self):
-        self._Command_Queue.put(("SC","Controller","Reset",()))
+        self._Command_Queue.put(("Controller","Reset",()))
 
     def SC_Exit(self):
-        self._Command_Queue.put(("Exit",()))
+        self._Command_Queue.put(("Controller","Exit",()))
 
     def Output_Queue_Empty(self):
         return self._SC_Out_Queue.empty()
@@ -328,6 +331,7 @@ class UMC_Interface_Extension:
         #Request the node to disconnect from the target address
         Message = {"Command":"Disconnect",
                               "Payload":{"Address":Target_Address}}
+        print(Message)
         self.Send(Address,Message)
 
 #####################
@@ -340,7 +344,7 @@ class UMC_Interface_Extension:
 
     def Get_Connected_Addresses(self,Address):
         #Request the addresses the node is connected to.
-        Message = {"Command":"Disconnect",
+        Message = {"Command":"Get_Connected_Addresses",
                    "Payload":{}}
         self.Send(Address,Message)
 

@@ -145,7 +145,7 @@ class DBConnection:
             raise Exception("This is not a valid block")
         
         block_num = block_info[0][0]
-        self._cur.execute("SELECT Block_Hash FROM Blocks WHERE Block_Number > %s AND Block_Number < %s AND On_Best_Chain = 1 ORDER BY Block_Number DESC",(block_num, block_num+number))
+        self._cur.execute("SELECT Block_Hash FROM Blocks WHERE Block_Number > %s AND Block_Number < %s AND On_Best_Chain = 1 ORDER BY Block_Number ASC",(block_num, block_num+number))
         hash_list = [item[0] for item in self._cur.fetchall()]  #Converts the result into a list of hashes
         return hash_list
 
