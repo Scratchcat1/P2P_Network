@@ -1,4 +1,4 @@
-import Database_System,Script_System,json,copy,hashlib, autorepr
+import Database_System,Script_System,json,copy,hashlib, autorepr, copy
 
 class Transaction(autorepr.AutoRepr):
     def __init__(self,db_con = None):
@@ -37,7 +37,7 @@ class Transaction(autorepr.AutoRepr):
 ##    def set_tx_hash(self,tx_hash):
 ##        self._tx_hash = tx_hash
     def set_is_coinbase(self,value):
-        self._coinbase = value
+        self._is_coinbase = value
     def set_timestamp(self,timestamp):
         self._timestamp = timestamp
     
@@ -76,7 +76,7 @@ class Transaction(autorepr.AutoRepr):
              "Sig":"",
              "Index":index,})
 
-    def add_output(self,value,locking_script,lock_time):
+    def add_output(self,value,locking_script,lock_time = 0):
 ##        if Value < 0:
 ##            raise Exception("Negative values are illegal")
         self._out.append({
@@ -113,7 +113,7 @@ class Transaction(autorepr.AutoRepr):
             message = self.raw_transaction_sig()
             for tx_in in self._in:
                 prev_tx = Get_Prev_Transaction(self._db_con,tx_in["Prev_Tx"],tx_in["Index"])
-                if prev_tx["Lock_Time"] > Time:
+                if prev_tx["Lock_Time"] > current_time:
                     raise Exception("Transaction output not yet unlocked. Current time is less than lock time")
 
                 script_processor.set_unlocking_script(tx_in["Sig"])
@@ -124,6 +124,7 @@ class Transaction(autorepr.AutoRepr):
                     raise Exception("Transaction input does not satisfy the locking script of the previous transaction")
             return True
         except Exception as e:
+            print(e)
             return False
 
 
@@ -147,7 +148,7 @@ class Transaction(autorepr.AutoRepr):
 
     def raw_transaction_sig(self):
         #tx digest bases on the values : inputs, outputs and timestamp, inputs do not have signatures
-        Transaction_Copy = self.tx_export().copy() # forms independant copy of transaction.
+        Transaction_Copy = copy.deepcopy(self.tx_export()) # forms independant copy of transaction.
 ##        Transaction_Copy.pop("Tx_Hash")
         for tx_in in Transaction_Copy["in"]:
             tx_in["Sig"] = ""
@@ -158,86 +159,57 @@ class Transaction(autorepr.AutoRepr):
 ##    def calculate_tx_hash(self):
 ##        return hashlib.sha256(self.json_export().encode()).hexdigest()
 
+    def finance_transaction(self,wallet,current_time,sorting_policy = [],tx_fee = 1, debug_verify = True):
+        #This method is used to populate a transaction with UTXOs to finance the outputs plus the tx_fee
+        #sorting_policy describes what system should be used to select the UTXOs i.e. random, highest_first, lowest_first, oldest_first, newest_first
+        #debug verify will set if the program should check the transaction solution is correct or not.
+        #the method will raise an error if it cannot complete financing.
+        #the transaction will not be signed - only filled
+        deficit = self.get_fee()*-1+tx_fee     #deficit is the amount the method must still collect to finance the transaction
+        utxos = self._db_con.Find_Address_UTXOs(list(wallet.get_addresses()),sorting_policy = sorting_policy)
+        script_processor = Script_System.Script_Processor()
+        for utxo_info in utxos:
+            if deficit <= 0:
+                break
+            if len(utxos) == 0:
+                raise Exception("No more UTXOs. Cannot finance transaction")
+            utxo = json.loads(utxo_info[1])
+            if utxo["Lock_Time"] > current_time:
+                continue    #Cannot be used as not yet unlocked
+            script_processor.set_locking_script(utxo["ScriptPubKey"])
+            script_type = script_processor.locking_script_type()
+            if script_type != "TYPE_0":
+                unlocking_script = script_processor.solve(script_type,wallet)   #This checks the tx is probably solvable
+            else:
+                continue
+
+            correct = True
+            if debug_verify:
+                script_processor.set_unlocking_script(unlocking_script)
+                correct = script_processor.process()
+            if correct:
+                self.add_input(utxo_info[0],utxo_info[2])
+                deficit -= utxo["Value"]
+            
+            
+            
+
 
     def __str__(self):
         data = [
-            ("Tx_Hash",self.get_tx_hash()),
+            ("Tx_Hash",self.get_transaction_hash()),
             ("Inputs",self._in),
             ("Outputs",self._out),
-            ("TimeStamp",self.self._timestamp)]
+            ("TimeStamp",self._timestamp)]
         return autorepr.str_repr(self,data)
             
 
 
 
 
-###########################################################
-    
-
-##def Create_Transaction(Wallet,Input_Transactions,Output_Transactions,Time):
-##    #Input_Transactions  <- List of transactions in form {Transaction_Hash,Index}
-##    #Output_Transactions <- list of transactions in form {Value, Locking Script,LockTime}
-##    transaction = {
-##        "in":[],
-##        "out":Output_Transactions,
-##        "TimeStamp":Time}
-##
-##    new_inputs,new_inputs_addresses,funds_available = Obtain_Input_Transactions(Wallet,Input_Transactions,Time)  #Obtain all input transactions and addresses
-##    if Check_Output_Values(Output_Transactions, funds_available):
-##        raise Exception("Output values are not valid")
-##    
-##    transaction["in"] = new_inputs
-##    sigs = []
-##    raw_sig = Get_Transaction_Signature(transaction)
-##    for address in new_inputs_addresses:   #Generate the signatures required
-##        public_key = Wallet.Get_Public_Key(address)
-##        signature = Wallet.Sign(address,raw_sig)
-##        sig = signature + "  " + public_key
-##        sigs.append(sig)
-##        
-##    for x in range(len(sigs)):  #Transfer the signatures to the transaction
-##        transaction["in"][x]["Sig"] = sigs[x]
-##    return transaction
-##        
-##
-##def Obtain_Input_Transactions(Wallet,Input_Transactions,Time):
-##    db_con = Database_System.DBConnection()
-##    new_inputs = []
-##    new_inputs_addresses = []
-##    funds_available = 0
-##    for tx_dict in Input_Transactions:
-##        new_input = {
-##            "Prev_Tx":tx_dict["Hash"],
-##            "Sig":"",
-##            "Index":tx_dict["Index"]}
-##        utxo = db_con.Get_Transaction(tx_dict["Hash"],tx_dict["Index"])
-##        if len(utxo) == 0:
-##            raise Exception("No such transaction "+tx_dict["Hash"])
-##        utxo = json.loads(utxo[0][1])
-##        
-##        if utxo["Lock_Time"] > Time:
-##            raise Exception("Transaction output not yet unlocked")
-##        tx_script = utxo["ScriptPubKey"]
-##        new_inputs_addresses.append(Find_Address(Wallet,tx_script))
-##        new_inputs.append(new_input)
-##        funds_available += utxo["Value"]
-##    return new_inputs,new_inputs_addresses,funds_available
-
-            
-
-##def Find_Address(Wallet,tx_script):
-##    Sucess = False
-##    for address in Wallet.Get_Addresses():
-##        if address in tx_script:
-##            Sucess = True
-##            break
-##    if Sucess:
-##        return address
-##    else:
-##        raise Exception("You do not own the address for this transaction")
 
 def Pay_To_Address_Script(Address):
-    return "OP_DUP  OP_HASH  "+Address+"  OP_EQUAL  OP_VERIFY"
+    return "OP_DUP  OP_HASH  "+Address+"  OP_EQUALVERIFY  OP_SIGVERIFY"
 
 def Get_Prev_Transaction(db_con,Prev_Transaction_Hash,Index):
     utxo = db_con.Get_Transaction(Prev_Transaction_Hash,Index)
@@ -247,52 +219,14 @@ def Get_Prev_Transaction(db_con,Prev_Transaction_Hash,Index):
     return utxo
 
 
+def test_financing():
+    import Wallet_System
+    w = Wallet_System.Wallet()
+    w.load_wallet()
+    target_address = w.generate_new_address()
+    w.save_wallet()
+    t = Transaction()
+    t.add_output(60,target_address)
+    t.finance_transaction(w,1000)
+    return w,t
 
-######    Validate   ######
-
-##def Check_Output_Values(Output_Transactions,funds_available):
-##    Check_Outputs_For_Negative(Output_Transactions)
-##    sum_out = 0
-##    for transaction in Output_Transactions:
-##        sum_out += transaction["Value"]
-##    return sum_out <= funds_available
-##
-##def Check_Outputs_For_Negative(Outputs):
-##    for output in Outputs:
-##        if output["Value"] < 0:
-##            raise Exception("Negative outputs are illegal")
-
-
-##def Validate_Transaction(Transaction,Time):  #dictionary form transaction
-##    db_con = Database_System.DBConnection()
-##    sum_inputs,sum_outputs = 0,0
-##    
-##    SP = Script_System.Script_Processor()
-##    raw_sig = Get_Transaction_Signature(Transaction)
-##
-##    for tx_in in Transaction["in"]:
-##        prev_tx = db_con.Get_Transaction(tx_in["PrevTx"],tx_in["Index"])
-##        if len(prev_tx) == 0:
-##            raise Exception("Transaction has invalid input transaction")
-##        prev_tx = json.loads(prev_tx)
-##        sum_inputs += prev_tx["Value"]
-####        Signature,Public_Key = tx_in["Sig"]
-####        if not SP.process(Signature + "  " + raw_sig + "  " + Public_Key + prev_tx["ScriptPubKey"]):
-##        if not SP.process(tx_in["Sig"]+ "  " + raw_sig + "  " + prev_tx["ScriptPubKey"]):
-##            raise Exception("Transaction input does not satisfy the locking script of the previous transaction")
-##        if prev_tx["Lcck_Time"] > Time:
-##            raise Exception("Previous transaction is not yet valid")
-##
-##    Check_Outputs_For_Negatives(Transaction["out"])
-##    for out in Transaction["out"]:
-##        sum_outputs += out["Value"]
-##
-##    fee = sum_inputs - sum_outputs
-##    if fee < 0:
-##        raise Exception("Output exceeds input")
-##    
-##        
-##        
-##    
-##            
-##        

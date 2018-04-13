@@ -263,6 +263,7 @@ def test(bn = 0,tim = 0,dif = 1,pblk = ""):
     
 def coinbase_tx(tim):
     t = Transaction_System.Transaction()
-    t.add_output(50,Transaction_System.Pay_To_Address_Script('caf78b1e6b85f812c00915dcf452f90815102b5be6cf0cf5ce4b36e162f3fe62'),0)
+    t.add_output(50,Transaction_System.Pay_To_Address_Script('ac236dce52860e10fda735c743ac54d565a089b19d2addcdfd501610cd564379'))
     t.set_timestamp(tim)
+    t.set_is_coinbase(True)
     return t

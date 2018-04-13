@@ -142,7 +142,7 @@ class Chain(autorepr.AutoRepr):
             print("Using default difficulty")
             target = DEFAULT_TARGET          #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
         diff = int(2**256 - min(target,DEFAULT_TARGET))
-        print("Target is 2**",math.log(target,2)," Difficulty is 2**",math.log(diff,2))
+        print("Target is 2**",math.log(2**256-diff,2)," Difficulty is 2**",math.log(diff,2))
         return diff
 
 

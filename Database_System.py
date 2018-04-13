@@ -87,8 +87,15 @@ class DBConnection:
         self._cur.executemany("INSERT INTO UTXO_Address VALUES(%s,%s,%s)",batches)
         self._db_con.commit()
 
-    def Find_Address_UTXOs(self,address_list,min_output = 0):
-        self._cur.execute("SELECT UTXO.* FROM UTXO,UTXO_Address WHERE UTXO_Address.Address IN %s AND UTXO_Address.Transaction_Hash = UTXO.Transaction_Hash AND UTXO_Address.Transaction_Index = UTXO.Transaction_Index AND UTXO.Output > %s",(address_list,min_output))
+    def Find_Address_UTXOs(self,address_list,min_output = 0,sorting_policy = []):
+        sort_string = ""
+        for item in sorting_policy:
+            value = SORTING_POLICY_MAP.get(item,None)
+            if value is not None:
+                sort_string += value + " "
+        if len(sort_string) != 0:
+            sort_string = "ORDER BY " + sort_string
+        self._cur.execute("SELECT UTXO.* FROM UTXO,UTXO_Address WHERE UTXO_Address.Address IN %s AND UTXO_Address.Transaction_Hash = UTXO.Transaction_Hash AND UTXO_Address.Transaction_Index = UTXO.Transaction_Index AND UTXO.Output > %s "+sort_string,(address_list,min_output))
         return self._cur.fetchall()
 
     def Remove_Address_UTXOs(self,tx_hash,tx_index):
@@ -238,3 +245,14 @@ def match_str_list(string,match_list):
         if item in string:
             return True
     return False
+
+
+SORTING_POLICY_MAP = {
+    "random":None,
+    "value_lowest_first":"Value ASC",
+    "value_highest_first":"Value DESC",
+    "tx_hash_lowest_first":"Transaction_Hash ASC",
+    "tx_hash_highest_first":"Transaction_Hash DESC",
+    "block_hash_lowest_first":"Block_Hash ASC",
+    "block_hash_highest_first":"Block_Hash DESC",
+    }
