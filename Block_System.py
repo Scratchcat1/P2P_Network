@@ -81,7 +81,7 @@ class Block(autorepr.AutoRepr):
         merkle_tree = Merkle_Tree.Merkle_Tree()
         txs = self.Get_Transaction_Objects()
         for tx in txs:
-            merkle_tree.Add_Hash(tx.Transaction_Hash())
+            merkle_tree.Add_Hash(tx.get_transaction_hash())
 
         merkle_root = merkle_tree.Calculate_Root()
         return merkle_root
@@ -97,21 +97,21 @@ class Block(autorepr.AutoRepr):
         fee = 0
         used_utxos = set()
         for tx in self.Get_Transaction_Objects():
-            if tx.Is_Coinbase():   #Coinbase does not need to verify inputs as it has none
+            if tx.get_is_coinbase():   #Coinbase does not need to verify inputs as it has none
                 coinbase_count += 1
                 coinbase_tx = tx
             else:
-                if not tx.Verify(self._TimeStamp):  #Timestamp allows checking of lock time
-                    raise Exception("Transaction",tx.Transaction_Hash()," is not valid")
-                fee += tx.Verify_Values()
-                for input_utxo in tx.Get_Input_UTXOs():  #Ensures that the utxo has not been used before
+                if not tx.verify(self._TimeStamp):  #Timestamp allows checking of lock time
+                    raise Exception("Transaction",tx.get_transaction_hash()," is not valid")
+                fee += tx.get_fee()
+                for input_utxo in tx.get_input_utxos():  #Ensures that the utxo has not been used before
                     if input_utxo in used_utxos:
-                        raise Exception("Two transactions reference same input")
+                        raise Exception("Double spend detected. Two transactions reference same input")
                     used_utxos.add(input_utxo)
                 
         if coinbase_count > 1:
             raise Exception("More than one coinbase transaction is not allowed")
-        if fee+50 < coinbase_tx.Get_Fee()*-1:
+        if fee+50 < coinbase_tx.get_fee()*-1:
             raise Exception("Coinbase output more than fees + 50")
 
     def Verify_Merkle_Root(self):
@@ -185,13 +185,13 @@ class Block(autorepr.AutoRepr):
         old_utxos = []                   # this will contain all the old transaction details. If a rebase were necessary then the transaction details would be included with the block which changed them and would not need to be obtained from searching the blockchain
         script_processor = Script_System.Script_Processor()
         for tx in self.Get_Transaction_Objects():
-            Mempool.remove_tx(tx.Transaction_Hash())            #Removes the relevant transactions which are in the block
-            for tx_in in tx.Get_Inputs():
+            Mempool.remove_tx(tx.get_transaction_hash())            #Removes the relevant transactions which are in the block
+            for tx_in in tx.get_inputs():
                 old_utxos.append(self._db_con.Remove_Transaction(tx_in["Prev_Tx"],tx_in["Index"]))
-            for index,tx_out in enumerate(tx.Get_Outputs()):
+            for index,tx_out in enumerate(tx.get_outputs()):
                 script_processor.set_locking_script(tx_out["ScriptPubKey"])
-                self._db_con.Add_Transaction(tx.Transaction_Hash(),json.dumps(tx_out),index,tx_out["Value"],self._Block_Hash)
-                self._db_con.Link_Transaction_Addresses(tx.Transaction_Hash(),index,script_processor.find_addresses())
+                self._db_con.Add_Transaction(tx.get_transaction_hash(),json.dumps(tx_out),index,tx_out["Value"],self._Block_Hash)
+                self._db_con.Link_Transaction_Addresses(tx.get_transaction_hash(),index,script_processor.find_addresses())
         return old_utxos
 
     def Rollback_UTXO(self,old_utxos,Mempool):
@@ -203,12 +203,12 @@ class Block(autorepr.AutoRepr):
             self._db_con.Link_Transaction_Addresses(old_utxo[0],old_utxo[2],script_processor.find_addresses())
 
         for tx in self.Get_Transaction_Objects():
-            if not tx.Is_Coinbase(): #Coinbase transactions should not be readded
-                Mempool.add_transaction_json(tx.Transaction_Hash(),tx.json_export(),tx.Get_Fee())  #Readds the transaction
-            for index,tx_out in enumerate(tx.Get_Outputs()):
+            if not tx.get_is_coinbase(): #Coinbase transactions should not be readded
+                Mempool.add_transaction_json(tx.get_transaction_hash(),tx.json_export(),tx.get_fee())  #Readds the transaction
+            for index,tx_out in enumerate(tx.get_ouputs()):
 ##                print(tx.Transaction_Hash(),index)
 ##                print(self._Block_Hash)
-                self._db_con.Remove_Transaction(tx.Transaction_Hash(),index)
+                self._db_con.Remove_Transaction(tx.get_transaction_hash(),index)
 
 
                 
@@ -263,6 +263,6 @@ def test(bn = 0,tim = 0,dif = 1,pblk = ""):
     
 def coinbase_tx(tim):
     t = Transaction_System.Transaction()
-    t.Add_Output(50,Transaction_System.Pay_To_Address_Script('caf78b1e6b85f812c00915dcf452f90815102b5be6cf0cf5ce4b36e162f3fe62'),0)
-    t.Set_TimeStamp(tim)
+    t.add_output(50,Transaction_System.Pay_To_Address_Script('caf78b1e6b85f812c00915dcf452f90815102b5be6cf0cf5ce4b36e162f3fe62'),0)
+    t.set_timestamp(tim)
     return t

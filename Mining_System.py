@@ -29,7 +29,7 @@ class Miner:
         transactions = self._mempool.get_txs()          #Obtain the txs to include
         block = Block_System.Block(difficulty,block_number,parent_block_hash)
         block.Set_TimeStamp(Time)                       #Set the correct timestamps
-        self._coinbase_tx.Set_TimeStamp(Time)
+        self._coinbase_tx.set_timestamp(Time)
         block.Add_Transaction(self._coinbase_tx)        #Add the coinbase transaction
         for tx in transactions:
             block.Add_Transaction(tx)

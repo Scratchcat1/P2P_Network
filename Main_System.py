@@ -310,9 +310,9 @@ class Main_Handler:
         for tx_json in Message["Payload"]:
             tx = Transaction_System.Transaction()
             tx.json_import(tx_json)
-            if not self._Mempool.has_tx(tx.Transaction_Hash()) and tx.Verify():
-                self._Mempool.add_transation_json(tx.Transaction_Hash(),tx_json,tx.Verify_Values())
-                self._rebroadcaster.add_tx_hash(tx.Transaction_Hash())
+            if not self._Mempool.has_tx(tx.get_transaction_hash()) and tx.verify():
+                self._Mempool.add_transation_json(tx.get_transaction_hash(),tx_json,tx.get_fee())
+                self._rebroadcaster.add_tx_hash(tx.get_transaction_hash())
                 
             
                                     
