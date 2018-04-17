@@ -1,8 +1,9 @@
 import Merkle_Tree,Database_System,Transaction_System,json,hashlib,Script_System
 import autorepr
 
-class Block(autorepr.AutoRepr):
+class Block(autorepr.Base):
     def __init__(self,Difficulty = -1,Block_Number = -1, Prev_Block_Hash = "",db_con = None):
+        self.logger_setup(__name__)
         self._Block_Hash = ""
         self._Difficulty = Difficulty
         self._Merkle_Root = ""
@@ -161,7 +162,7 @@ class Block(autorepr.AutoRepr):
             self.Verify_Transactions()
             return True
         except Exception as e:
-            print(e)
+            self._logger.error("Exception in verification of block",exc_info = True)
             return False
 
     ###############################################
@@ -171,7 +172,7 @@ class Block(autorepr.AutoRepr):
             raw_hash_source["Nonce"] = i
             block_hash = hashlib.sha256(json.dumps(raw_hash_source,sort_keys = True).encode()).hexdigest()
             if int(block_hash,16) < 2**256 - self._Difficulty:
-                print("Found block hash:",block_hash,"after",i,"iterations")
+                self._logger.info("Found block hash: %s after %s iterations" % (block_hash,i))
                 self._Nonce = i
                 self._Block_Hash = block_hash
                 return block_hash
@@ -181,7 +182,7 @@ class Block(autorepr.AutoRepr):
 
 
     def Update_UTXO(self,Mempool):       #Remove inputs from utxo and add outputs to utxo
-        print("Adding block",self._Block_Hash,"UTXOs to the UTXO")
+        self._logger.info("Adding block %s UTXOs to the UTXO" % (self._Block_Hash,))
         old_utxos = []                   # this will contain all the old transaction details. If a rebase were necessary then the transaction details would be included with the block which changed them and would not need to be obtained from searching the blockchain
         script_processor = Script_System.Script_Processor()
         for tx in self.Get_Transaction_Objects():
@@ -195,7 +196,7 @@ class Block(autorepr.AutoRepr):
         return old_utxos
 
     def Rollback_UTXO(self,old_utxos,Mempool):
-        print("Removing block",self._Block_Hash,"UTXOs to the UTXO")
+        self._logger.info("Removing block %s UTXOs to the UTXO" % (self._Block_Hash,))
         script_processor = Script_System.Script_Processor()
         for old_utxo in old_utxos:
             script_processor.set_locking_script(old_utxo[1])

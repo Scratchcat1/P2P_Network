@@ -1,6 +1,37 @@
 import prettytable
+import logging
+import os
+import sys
 
-class AutoRepr:
+
+class Base:
+    def logger_setup(self,module_name):
+        #Ensure logs folder has been created
+        directory_path = "logs"
+        if not os.path.exists(directory_path):
+            os.makedirs(directory_path)
+
+        #Get logger for a specific module and class
+        self._logger = logging.getLogger(name = module_name+"."+self.__class__.__name__)
+        self._logger.setLevel(logging.DEBUG)
+        if len(self._logger.handlers) == 0: #Create handlers if they have not already been created.
+            #Create a file handler to log
+            log_file_handler = logging.FileHandler(os.path.join(directory_path,"debug.log"))
+            log_file_handler.setLevel(logging.DEBUG)
+            #Create a stream handler
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(logging.DEBUG)
+            #Create a formatter and pass to stream and file handlers
+            formatter = logging.Formatter("[%(asctime)s][%(levelname)s] %(name)s - %(message)s")
+            log_file_handler.setFormatter(formatter)
+            console_handler.setFormatter(formatter)
+            #Add handlers to logger
+            self._logger.addHandler(log_file_handler)
+            self._logger.addHandler(console_handler)
+
+    def get_logger(self):
+        return self._logger
+        
     def __repr__(self):
         items = ("%s = %r" % (k, v) for k, v in self.__dict__.items())
         return "<%s: {%s}>" % (self.__class__.__name__, ', '.join(items))

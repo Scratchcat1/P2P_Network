@@ -1,8 +1,9 @@
 import Database_System,Script_System,json,copy,hashlib, autorepr, copy
 
-class Transaction(autorepr.AutoRepr):
+class Transaction(autorepr.Base):
     def __init__(self,db_con = None):
 ##        self._tx_hash = ""
+        self.logger_setup(__name__)
         self._is_coinbase = False
         self._in = []
         self._out = []
@@ -124,7 +125,7 @@ class Transaction(autorepr.AutoRepr):
                     raise Exception("Transaction input does not satisfy the locking script of the previous transaction")
             return True
         except Exception as e:
-            print(e)
+            self._logger.error("Exception verifying transaction", exc_info = True)
             return False
 
 

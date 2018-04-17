@@ -1,8 +1,9 @@
 import json,ecdsa,hashlib,codecs,base64_System
 import autorepr
 
-class Wallet(autorepr.AutoRepr):
+class Wallet(autorepr.Base):
     def __init__(self,wallet_file = "wallet.json"):
+        self.logger_setup(__name__)
         self._wallet_file = wallet_file
         self._wallet = {}
 
@@ -11,7 +12,7 @@ class Wallet(autorepr.AutoRepr):
             self._wallet_file = wallet_file 
         with open(self._wallet_file) as file:
             self._wallet = json.load(file)
-        print("Loaded wallet with ",len(self._wallet),"Addresses")
+        self._logger.info("Loaded wallet with ",len(self._wallet),"Addresses")
 
     def save_wallet(self):
         with open(self._wallet_file,"w") as file:
@@ -33,8 +34,9 @@ class Wallet(autorepr.AutoRepr):
     def sign(self,address,message):
 ##        message_hash = hashlib.sha256(str(message).encode()).digest()
         PrKO = ecdsa.SigningKey.from_string(base64_System.b64_to_bstr(self._wallet[address]["Private_Key"]))
-        signature = PrKO.sign(message.encode())
-        return codecs.encode(signature,"base64").decode()
+        signature = base64_System.str_to_b64(PrKO.sign(message.encode()))
+        self._logger.debug("Wallet with address %s obtained signature %s from message %s" % (address,signature,message))
+        return signature
 
     def get_public_key(self,address):
         return self._wallet[address]["Public_Key"]

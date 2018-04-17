@@ -1,8 +1,9 @@
 import Networking_System, Database_System, Alert_System, Chain_System, Block_System, Transaction_System, Mempool_System, Mining_System, base64_System, Wallet_System
-import random,time,numpy,os,hashlib
+import random,time,numpy,os,hashlib, autorepr
 
-class Time_Keeper:
+class Time_Keeper(autorepr.Base):
     def __init__(self):
+        self.logger_setup(__name__)
         self._Offset = 0
     def adjust(self,Desired_Time):
         print(Desired_Time-time.time())
@@ -61,6 +62,9 @@ class Request_Queue(Ticker):  #Ticker with storage
     def reset_queue(self):
         self._request_queue = []
 
+    def get_size(self):
+        return len(self._request_queue)
+
     def resize(self):   #If too large then purge older items
         if len(self._request_queue) > self._max_size:
             self._request_queue = self._request_queue[-self._maxsize:]
@@ -73,9 +77,10 @@ def Val_Limit(Value,Max,Min):   #https://stackoverflow.com/questions/5996881/how
     return max(min(Value,Max),Min)
 
     
-class Main_Handler:
+class Main_Handler(autorepr.Base):
     def __init__(self,Node_Info = Networking_System.Network_Node(("127.0.0.1",8000)),Max_Connections = 15,Max_SC_Messages = 100, miner = None,wallet = Wallet_System.Wallet()):
-        print("Starting Main_Handler...")
+        self.logger_setup(__name__)
+        self._logger.info("Starting Main_Handler...")
         self._db_con = Database_System.DBConnection()
         self._Node_Info = Node_Info
         self._Max_SC_Messages = Max_SC_Messages
@@ -140,24 +145,28 @@ class Main_Handler:
             "New_Wallet_Address":self.on_UMC_new_wallet_address,
             "Sign_Message":self.on_UMC_sign_message,
                 }
-        print("Main_Handler started.")
+        self._logger.info("Main_Handler started.")
 
     def main_loop(self):
         self._Exit = False
         while not self._Exit:
-            self.process_SC_messages()
-            self.check_network_nodes()
-            self.run_rebroadcast()
-            self.run_requester()
-            self.check_sync_blocks()
-            self.check_miner()
+            try:
+                self.process_SC_messages()
+                self.check_network_nodes()
+                self.run_rebroadcast()
+                self.run_requester()
+                self.check_sync_blocks()
+                self.check_miner()
+            except Exception as e:
+                self._logger.error("Error in main loop", exc_info = True)
             time.sleep(1/60)
 
         #Shutdown procedures
         if self._miner:
             self._miner.close()
+            self._logger.debug("Miner has been shut down")
         self._SI.SC_Exit()
-        print("Node has shutdown! Goodbye")
+        self._logger.info("Node has shutdown! Goodbye")
 
 
 
@@ -165,7 +174,7 @@ class Main_Handler:
         Processed_Message_Number = 0
         while not self._SI.Output_Queue_Empty() and Processed_Message_Number < self._Max_SC_Messages:
             message = self._SI.Get_Item()
-            print("Process MESSAGE",message)
+            self._logger.DEBUG("Process MESSAGE %s" % (message,))
 
             if message["Command"] in self._UMC_Commands and message["Address"] in self._UMCs:
                 self._UMC_Commands[message["Command"]](message)  #Execute the relevant UMC command with the message as an argument
@@ -228,7 +237,7 @@ class Main_Handler:
             for Address in self._Nodes:
                 self._SI.Alert(Message["Payload"]["Username"],Message["Payload"]["Message"],Message["Payload"]["TimeStamp"],Message["Payload"]["Signature"],Message["Payload"]["Level"]-1)
         else:
-            print("Invalid alert denied progress")
+            self._logger.debug("Invalid alert denied progress")
 
     def on_exit(self,Message):
         self._SI.Exit_Response(Message["Address"])
@@ -335,7 +344,7 @@ class Main_Handler:
 
     def check_network_nodes(self):
         if self._Network_Nodes_Check_Timer.is_go():
-            print("Checking nodes")
+            self._logger.info("Checking state of connected nodes")
             self._Network_Nodes_Check_Timer.reset()
             if len(self._Network_Nodes) < 15:
                 difference = 15-len(self._Network_Nodes)
@@ -353,6 +362,7 @@ class Main_Handler:
 
     def run_rebroadcast(self):
         if self._rebroadcaster.is_go():
+            self._logger.debug("Rebroadcasting data to a random set of nodes. Size of rebroadcast queue is %s" % (self._rebroadcaster.get_size(),))
             self._rebroadcaster.reset()
             for address in random.sample(list(self._Network_Nodes),min(8,len(self._Network_Nodes))):
                 self._SI.Inv(address,self._rebroadcaster.get_queue(reset = False))
@@ -360,6 +370,7 @@ class Main_Handler:
 
     def run_requester(self):
         if self._requester.is_go():
+            self._logger.debug("Requesting data from remote nodes. Size of request queue is %s" % (self._requester.get_size(),))
             self._requester.reset()
             packets = {}
             for item in self._requester.get_queue():
@@ -384,7 +395,7 @@ class Main_Handler:
         if self._Block_Sync_Timer.is_go():
             self._Block_Sync_Timer.reset()
             if self._db_con.Get_Highest_Work_Block()[0][5] < self._Time.time() - 24*3600:
-                print("Highest block to old, searching for new blocks")
+                self._logger.info("Highest block to old, searching for new blocks")
                 for address in random.sample(list(self._Network_Nodes),min(1,len(self._Network_Nodes))):    #Single node only, randomly selected, none if no connections 
                     known_hashes = self._db_con.Find_Best_Known_Pattern(self._Chain.get_highest_block_hash())
                     self._SI.Get_Blocks(address,known_hashes)
@@ -425,12 +436,11 @@ class Main_Handler:
         self._SI.Create_Connection(message["Payload"]["Address"])
     def on_UMC_disconnect(self,message):
         #Potentially exit this in a more graceful manner
-        print(message["Payload"]["Address"])
         self._SI.Kill_Connection(message["Payload"]["Address"])
 
     def on_UMC_shutdown(self,message):
         self._Exit = True
-        print("MAIN HANDLER IS SHUTTING DOWN")
+        self._logger.info("MAIN HANDLER IS SHUTTING DOWN")
 
     def on_UMC_get_authentication(self,message):
         salt = base64_System.str_to_b64(os.urandom(64))

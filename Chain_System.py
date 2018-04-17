@@ -1,14 +1,15 @@
 import Database_System,Block_System,json,os,Mempool_System, autorepr, hashlib,math
 
-class Chain(autorepr.AutoRepr):
+class Chain(autorepr.Base):
     def __init__(self,Mempool):
+        self.logger_setup(__name__)
         self._db_con = Database_System.DBConnection()
         self._Mempool = Mempool  #Contains a reference to the Mempool object
         try:
             self._highest_block_hash = self.get_highest_block_hash()
             self._difficulty = self.find_difficulty()
         except Exception as e:
-            print("Error creating chain, may occur on first run without genesis block! Using default attributes. Error:",e)
+            self._logger.error("Error creating chain, may occur on first run without genesis block! Using default attributes.",exc_info = True)
             self._highest_block_hash = ""
             self._difficulty = 1
 
@@ -78,7 +79,7 @@ class Chain(autorepr.AutoRepr):
             return True  # new chain has overtaken old best chain so rebase needed
 
     def rebase_chain(self,new_block_hash):
-        print("Alternate chain is now longest chain. Rebasing the chain...")
+        self._logger.info("Alternate chain is now longest chain. Rebasing the chain...")
         common_root = self.establish_common_root_block(self._highest_block_hash,new_block_hash)
         current_hash = self._highest_block_hash  #old highest block hash will be rolled back
 
@@ -100,7 +101,7 @@ class Chain(autorepr.AutoRepr):
         hash_a_set = set()
         hash_b_set = set()
         while len(hash_a_set.intersection(hash_b_set)) == 0:
-            print(hash_a,hash_b)
+            self._logger.debug("common root block hash pair %s %s" % (hash_a,hash_b))
             hash_a,hash_a_set = parent_set_add(self._db_con,hash_a,hash_a_set)
             hash_b,hash_b_set = parent_set_add(self._db_con,hash_b,hash_b_set)
         return list(hash_a_set.intersection(hash_b_set))[0] # common root
@@ -135,14 +136,14 @@ class Chain(autorepr.AutoRepr):
 
         if len(blocks) > 0 and blocks[0][5] != blocks[-1][5]:
             time_per_block = (max(blocks[0][5],blocks[-1][5])-min(blocks[0][5],blocks[-1][5]))/len(blocks)
-            print("Toime per block",time_per_block)
+            self._logger.info("Time per block %s" % (time_per_block,))
             avg_diff = int(sum_diff/len(blocks))
             target =  time_per_block/60 * avg_diff   # actualTime/TargetTime * current difficulty, if T < a difficulty/target is reduced
         else:
-            print("Using default difficulty")
+            self._logger.info("Using default difficulty")
             target = DEFAULT_TARGET          #if error then reset difficulty to default. Diff is 2**256 - Target which it must be below
         diff = int(2**256 - min(target,DEFAULT_TARGET))
-        print("Target is 2**",math.log(2**256-diff,2)," Difficulty is 2**",math.log(diff,2))
+        self._logger.info("Target is 2**%s Difficulty is 2**%s" % (math.log(2**256-diff,2),math.log(diff,2)))
         return diff
 
 
@@ -161,7 +162,7 @@ class Chain(autorepr.AutoRepr):
             
             
 def parent_set_add(db_con,hash_item,hash_set):
-    print(hash_item)
+    self._logger.debug("hash item %s" % (hash_item,))
     hash_item = db_con.Get_Block(hash_item)
     if len(hash_item) > 0:
         hash_item = hash_item[0][4] #prev block hash
@@ -183,7 +184,7 @@ def parent_set_add(db_con,hash_item,hash_set):
 
 
 
-class HashTableIO(autorepr.AutoRepr):
+class HashTableIO(autorepr.Base):
     """
     An object to abstract storing dictionary values across multiple files
     block_key_function is used to derive the key for the file to be opened. Form -> lambda key,kwargs: ~process function~. Must return a string to be used as the filename.
@@ -251,7 +252,7 @@ def Generate_Genesis_Block():
     c._db_con.Set_Block_On_Best_Chain(block.Get_Block_Hash(),1)  #Mark this block as part of the best chain
     c.add_block_rollback(block.Get_Block_Hash(),rollback_data)
     db_con.Exit()
-    print("GENERATED GENESIS BLOCK\n")
+    self._logger.info("GENERATED GENESIS BLOCK\n")
 
 
 
@@ -266,12 +267,12 @@ def sim():
         print("")
 
     print("")
-    print("Generating side chain")
+    self._logger.info("Generating side chain")
     
     b = c.get_block(GENESIS_BLOCK_HASH)
     for n in range(1,3000):
-        if n% 100 == 0:
-            print("\n"*5,"Block",n,"\n")
+        if n % 100 == 0:
+            self._logger.info("Simulation block %s generated" % (n,))
         w,t,b = Block_System.test(bn= n, tim = n+100,pblk = b.Get_Block_Hash(),dif = c.get_difficulty())
         c.add_block(b)
     return c
