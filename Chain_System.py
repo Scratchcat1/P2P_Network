@@ -9,7 +9,7 @@ class Chain(autorepr.Base):
             self._highest_block_hash = self.get_highest_block_hash()
             self._difficulty = self.find_difficulty()
         except Exception as e:
-            self._logger.error("Error creating chain, may occur on first run without genesis block! Using default attributes.",exc_info = True)
+            self._logger.debug("Error creating chain, may occur on first run without genesis block! Using default attributes.")
             self._highest_block_hash = ""
             self._difficulty = 1
 
@@ -252,7 +252,7 @@ def Generate_Genesis_Block():
     c._db_con.Set_Block_On_Best_Chain(block.Get_Block_Hash(),1)  #Mark this block as part of the best chain
     c.add_block_rollback(block.Get_Block_Hash(),rollback_data)
     db_con.Exit()
-    self._logger.info("GENERATED GENESIS BLOCK\n")
+    c._logger.info("GENERATED GENESIS BLOCK\n")
 
 
 
@@ -267,12 +267,12 @@ def sim():
         print("")
 
     print("")
-    self._logger.info("Generating side chain")
+    c._logger.info("Generating side chain")
     
     b = c.get_block(GENESIS_BLOCK_HASH)
     for n in range(1,3000):
         if n % 100 == 0:
-            self._logger.info("Simulation block %s generated" % (n,))
+            c._logger.info("Simulation block %s generated" % (n,))
         w,t,b = Block_System.test(bn= n, tim = n+100,pblk = b.Get_Block_Hash(),dif = c.get_difficulty())
         c.add_block(b)
     return c

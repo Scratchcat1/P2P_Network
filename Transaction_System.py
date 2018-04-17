@@ -125,7 +125,7 @@ class Transaction(autorepr.Base):
                     raise Exception("Transaction input does not satisfy the locking script of the previous transaction")
             return True
         except Exception as e:
-            self._logger.error("Exception verifying transaction", exc_info = True)
+            self._logger.debug("Exception verifying transaction")
             return False
 
 

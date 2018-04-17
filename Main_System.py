@@ -174,7 +174,7 @@ class Main_Handler(autorepr.Base):
         Processed_Message_Number = 0
         while not self._SI.Output_Queue_Empty() and Processed_Message_Number < self._Max_SC_Messages:
             message = self._SI.Get_Item()
-            self._logger.DEBUG("Process MESSAGE %s" % (message,))
+            self._logger.debug("Process MESSAGE %s" % (message,))
 
             if message["Command"] in self._UMC_Commands and message["Address"] in self._UMCs:
                 self._UMC_Commands[message["Command"]](message)  #Execute the relevant UMC command with the message as an argument

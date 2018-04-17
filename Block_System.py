@@ -162,7 +162,7 @@ class Block(autorepr.Base):
             self.Verify_Transactions()
             return True
         except Exception as e:
-            self._logger.error("Exception in verification of block",exc_info = True)
+            self._logger.debug("Exception in verification of block. Error: %s" % (e,))
             return False
 
     ###############################################

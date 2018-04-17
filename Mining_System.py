@@ -28,7 +28,7 @@ class Miner(autorepr.Base):
 
 
     def restart_mine(self,Time,difficulty,block_number,parent_block_hash):
-        self._logger.debug("Restarting miner. Parent block hash: %s  difficulty: %s  block number: %s  time: %s" % (parent_block_hash, math.log(2**256 - difficulty), block_number, Time))
+        self._logger.debug("Restarting miner. Parent block hash: %s  difficulty: %s  block number: %s  time: %s" % (parent_block_hash, math.log(2**256 - difficulty,2), block_number, Time))
         transactions = self._mempool.get_txs()          #Obtain the txs to include
         block = Block_System.Block(difficulty,block_number,parent_block_hash)
         block.Set_TimeStamp(Time)                       #Set the correct timestamps
