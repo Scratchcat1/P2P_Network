@@ -216,10 +216,11 @@ def get_peers_dialog(**kwargs):
     return form
 
 #Get all the UTXOs
-def get_UTXOs_dialog(**kwargs):
+def get_utxos_dialog(**kwargs):
     form = UI_Form()
     form.set_title("Get the UTXOs from the node")
-    form.add_command("Go",kwargs.get("Go",None),())
+    form.add_query("Wallet addresses comma separated",lambda x:x.replace(" ","").split(","))
+    form.add_command("Go",kwargs.get("Go",None),("%Wallet addresses comma separated%",))
     return form
 
 #Send an alert using the credentials stored on the current node
@@ -255,20 +256,31 @@ def sign_message_dialog(**kwargs):
     form.add_command("Go",kwargs.get("Go",None),("%Wallet Address%","%Message%"))
     return form
 
-#Get the public key of an address in the wallet
-def get_wallet_address_public_key_dialog(**kwargs):
-    form = UI_Form()
-    form.set_title("Get the public key of a wallet")
-    form.add_query("Address",str)
-    form.add_command("Go",kwargs.get("Go",None),("%Address",))
-    return form
+###Get the public key of an address in the wallet
+##def get_wallet_address_public_key_dialog(**kwargs):
+##    form = UI_Form()
+##    form.set_title("Get the public key of a wallet")
+##    form.add_query("Address",str)
+##    form.add_command("Go",kwargs.get("Go",None),("%Address",))
+##    return form
+##
+###Get the private key of an address in the wallet
+##def get_wallet_address_private_key_dialog(**kwargs):
+##    form = UI_Form()
+##    form.set_title("Get the private key of a wallet")
+##    form.add_query("Address",str)
+##    form.add_command("Go",kwargs.get("Go",None),("%Address"))
+##    return form
 
-#Get the private key of an address in the wallet
-def get_wallet_address_private_key_dialog(**kwargs):
+#Get wallet keys
+def get_wallet_keys_dialog(**kwargs):
     form = UI_Form()
-    form.set_title("Get the private key of a wallet")
-    form.add_query("Address",str)
-    form.add_command("Go",kwargs.get("Go",None),("%Address"))
+    form.set_title("Get wallet keys")
+    form.add_query("Wallet addresses comma separated",lambda x:x.replace(" ","").split(","))
+    form.add_query("Get public keys Y/N",lambda x:x[0].upper() == "Y")
+    form.add_query("Get private keys Y/N",lambda x:x[0].upper() == "Y")
+    #List of addresses, public keys bool, private keys bool
+    form.add_command("Go",kwargs.get("Go",None),("%Wallet addresses comma separated%","%Get public keys Y/N%","%Get private keys Y/N%"))
     return form
 
 #Dump the wallet to json
@@ -277,18 +289,18 @@ def dump_wallet_dialog(**kwargs):
     form.set_title("Dump the wallet and return the information")
     form.add_command("Go",kwargs.get("Go",None),())
     return form
-
-#Get the UTXOs in the wallet
-def get_wallet_UTXOs_dialog(**kwargs):
-    form = UI_Form()
-    form.set_title("Get the UTXOs in the wallet")
-    form.add_command("Go",kwargs.get("Go",None),())
-    return form
-
-#Get all the transactions associated with this wallet.
-def get_wallet_transactions_dialog(**kwargs):
-    form = UI_Form()
-    form.set_title("Get the transactions in the wallet")
-    form.add_command("Go",kwargs.get("Go",None),())
-    return form
+##
+###Get the UTXOs in the wallet
+##def get_wallet_UTXOs_dialog(**kwargs):
+##    form = UI_Form()
+##    form.set_title("Get the UTXOs in the wallet")
+##    form.add_command("Go",kwargs.get("Go",None),())
+##    return form
+##
+###Get all the transactions associated with this wallet.
+##def get_wallet_transactions_dialog(**kwargs):
+##    form = UI_Form()
+##    form.set_title("Get the transactions in the wallet")
+##    form.add_command("Go",kwargs.get("Go",None),())
+##    return form
 

@@ -1,7 +1,7 @@
 import tkinter as tk
 import Auto_UI,Networking_System
-import time, hashlib
-class UI_Window:
+import time, hashlib, autorepr
+class UI_Window(autorepr.Base):
     def __init__(self,root):
         #########################################################################
         #   ROOT is the tk window
@@ -10,6 +10,7 @@ class UI_Window:
         #
         #
         ##########################################################################
+        self.logger_setup(__name__)
         self._root = root
         self._root.title("Very Window. Wow Display!")
         self._root.geometry("500x300+100+100")
@@ -66,14 +67,25 @@ class UI_Window:
         menubar = tk.Menu(self._root)
         menubar.add_command(label = "Test print",command = lambda :print("HI THIS IS TEST BUTTON MENU BAR"))
 
-        gen_menubar = tk.Menu(menubar, tearoff = 1)
+        gen_menubar = tk.Menu(menubar, tearoff = 0)
         gen_menubar.add_command(label = "Connect_Dialog",command = lambda :self.connect_dialog())
         gen_menubar.add_command(label = "Disconnect_Dialog",command = lambda :self.disconnect_dialog())
         gen_menubar.add_command(label = "Shutdown_Dialog",command = lambda :self.shutdown_dialog())
         gen_menubar.add_command(label = "Get_Connected_Addresses_Dialog",command = lambda :self.get_connected_addresses_dialog())
+        gen_menubar.add_command(label = "Get_Peers_Dialog",command = lambda :self.get_peers_dialog())
+        gen_menubar.add_command(label = "Get_UTXOs_Dialog",command = lambda :self.get_utxos_dialog())
+        gen_menubar.add_command(label = "Send_Alert_Dialog",command = lambda :self.send_alert_dialog())
         menubar.add_cascade(label = "Generic",menu = gen_menubar)
 
-        UMC_menubar = tk.Menu(menubar, tearoff = 1)
+        wallet_menubar = tk.Menu(menubar, tearoff = 0)
+        wallet_menubar.add_command(label = "Get_Wallet_Addresses_Dialog",command = lambda :self.get_wallet_addresses_dialog())
+        wallet_menubar.add_command(label = "New_Wallet_Address_Dialog",command = lambda :self.new_wallet_address_dialog())
+        wallet_menubar.add_command(label = "Sign_Message_Dialog",command = lambda :self.sign_message_dialog())
+        wallet_menubar.add_command(label = "Get_Wallet_Keys_Dialog",command = lambda :self.get_wallet_keys_dialog())
+        wallet_menubar.add_command(label = "Dump_Wallet_Dialog",command = lambda :self.dump_wallet_dialog())
+        menubar.add_cascade(label = "Wallet",menu = wallet_menubar)
+        
+        UMC_menubar = tk.Menu(menubar, tearoff = 0)
         UMC_menubar.add_command(label = "UMC_Connect_Dialog",command = lambda :self.UMC_connect_dialog())
         UMC_menubar.add_command(label = "UMC_Disconnect_Dialog",command = lambda :self.UMC_disconnect_dialog())
         menubar.add_cascade(label = "UMC",menu = UMC_menubar)
@@ -89,6 +101,7 @@ class UI_Window:
                     message = self._UMC.Get_Item()
     ##                print(message)
                     if filter_func(message):    #Determins if the message is the one desired.
+                        print("Filtered wait for message %s" %(message,))
                         return message
                     else:
                         self._message_queue.put(message)
@@ -163,7 +176,7 @@ class UI_Window:
         self.set_banner("Authentication Sucess:"+str(auth_outcome["Payload"]["Outcome"]))
         if auth_outcome["Payload"]["Outcome"]:
             self._TARGET_ADDRESS = (IP,Port)
-            print(IP,":",Port, "is now the target node")
+            self._logger.info("%s:%s is now the target node" % (IP,Port))
         #########
 
     def UMC_disconnect_dialog(self):
@@ -207,7 +220,17 @@ class UI_Window:
         self.display_message(peers_message)
 
         ############
-        # All UTXOs not available due to sheer quantity
+    def get_utxos_dialog(self):
+        self.reset_main_frame()
+        form = Auto_UI.get_utxos_dialog(Go = self.on_get_utxos_go)
+        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+
+    def on_get_utxos_go(self,wallet_addresses):
+        self._UMC.Get_UTXOs(self._TARGET_ADDRESS, wallet_addresses)
+        utxos_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "UTXOs")
+        self.display_message(utxos_message)
+        
+        
         ############
 
     def send_alert_dialog(self):
@@ -238,7 +261,7 @@ class UI_Window:
 
     def new_wallet_address_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.new_wallet_address_dialog(Go = self.on_new_wallet_address_go())
+        form = Auto_UI.new_wallet_address_dialog(Go = self.on_new_wallet_address_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
     def on_new_wallet_address_go(self):
@@ -250,7 +273,7 @@ class UI_Window:
 
     def sign_message_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.sign_message_dialog(Go = self.on_sign_message_go())
+        form = Auto_UI.sign_message_dialog(Go = self.on_sign_message_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
     def on_sign_message_go(self,wallet_address,message):
@@ -258,34 +281,64 @@ class UI_Window:
         signature_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Signed_Message")
         self.display_message(signature_message)
 
+##        #########
+##
+##    def get_wallet_address_public_key_dialog(self):
+##        self.reset_main_frame()
+##        form = Auto_UI.get_wallet_address_public_key_dialog(Go = self.on_get_wallet_address_public_key_go())
+##        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+##
+##    def on_get_wallet_address_public_key_go(self,wallet_address):
+##        self._UMC.Get_Wallet_Address_Public_Key(self._TARGET_ADDRESS,wallet_address)
+##        public_key_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Address_Public_Key")
+##        self.display_message(public_key_message)
+##
+##        ###########
+##
+##    def get_wallet_address_private_key_dialog(self):
+##        self.reset_main_frame()
+##        form = Auto_UI.get_wallet_address_private_key_dialog(Go = self.on_get_wallet_address_private_key_go())
+##        Auto_UI.Tk_Form_Display().run(self._main_frame,form)
+##
+##    def on_get_wallet_address_private_key_go(self,wallet_address):
+##        self._UMC.Get_Wallet_Address_Private_Key(self._TARGET_ADDRESS,wallet_address)
+##        private_key_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Address_Private_Key")
+##        self.display_message(private_key_message)
+##
         #########
 
-    def get_wallet_address_public_key_dialog(self):
+    def get_wallet_keys_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.get_wallet_address_public_key_dialog(Go = self.on_get_wallet_address_public_key_go())
+        form = Auto_UI.get_wallet_keys_dialog(Go = self.on_get_wallet_keys_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
-    def on_get_wallet_address_public_key_go(self,wallet_address):
-        self._UMC.Get_Wallet_Address_Public_Key(self._TARGET_ADDRESS,wallet_address)
-        public_key_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Address_Public_Key")
-        self.display_message(public_key_message)
+    def on_get_wallet_keys_go(self,addresses_list, public_keys, private_keys):
+        self.set_banner("Requested wallet keys from %s" %(self._TARGET_ADDRESS,))
+        wallet_addresses = {}
+        for address in addresses_list:
+            wallet_addresses[address] = {"Public":False,"Private":False}
+            if public_keys:
+                wallet_addresses[address]["Public"] = True
+            if private_keys:
+                wallet_addresses[address]["Private"] = True
+        self._UMC.Get_Wallet_Keys(self._TARGET_ADDRESS,wallet_addresses)
+        keys_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Keys")
+        self.display_message(keys_message)
 
-        ###########
+        #########
 
-    def get_wallet_address_private_key_dialog(self):
+    def dump_wallet_dialog(self):
         self.reset_main_frame()
-        form = Auto_UI.get_wallet_address_private_key_dialog(Go = self.on_get_wallet_address_private_key_go())
+        form = Auto_UI.dump_wallet_dialog(Go = self.on_dump_wallet_go)
         Auto_UI.Tk_Form_Display().run(self._main_frame,form)
 
-    def on_get_wallet_address_private_key_go(self,wallet_address):
-        self._UMC.Get_Wallet_Address_Private_Key(self._TARGET_ADDRESS,wallet_address)
-        private_key_message = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Address_Private_Key")
-        self.display_message(private_key_message)
+    def on_dump_wallet_go(self):
+        self.set_banner("Requested wallet dump")
+        self._UMC.Dump_Wallet(self._TARGET_ADDRESS)
+        wallet_dump = self.wait_for_message(lambda m:m["Address"] == self._TARGET_ADDRESS and m["Command"] == "Wallet_Dump_Data")
+        self.display_message(wallet_dump)
 
         #########
-
-        #########
-        #dump wallet
         #wallet utxos
         #wallet transactions
         #########
@@ -324,7 +377,7 @@ class UI_Window:
             message_button = tk.Button(self._ticker_frame,text = text+" "*(206-len(text)),command = lambda message = message: self.display_message(message))
             message_button.grid(row = i,column = 0)
             
-        print("Ticker queue length:",len(self._message_queue))
+        self._logger.debug("Ticker queue length: %s" %(len(self._message_queue),))
         self._message_queue.remove()                #Remove old messages. After loop as these messages will have been displayed.
         self._root.after(10*1000,self.run_ticker)   #Schedule ticker to run again in 10 seconds.
 
@@ -340,7 +393,7 @@ class UI_Window:
             payload_label = tk.Label(self._main_frame,text = "Payload:")
             payload_label.grid(row = 3,column = 0,sticky = tk.W)
 
-            for i,item in enumerate(message["Payload"]):
+            for i,item in enumerate(list(message["Payload"])):
                 payload_value_label = tk.Label(self._main_frame,text = item)
                 payload_value_label.grid(row = 3+i,column = 1,sticky = tk.W)
         

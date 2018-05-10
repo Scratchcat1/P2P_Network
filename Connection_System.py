@@ -80,5 +80,5 @@ def Outgoing_Connection_Handler(Thread_Name,Command_Queue,Return_Queue,TPort = 8
 
         except Exception as e:
             print("Outgoing connection error for ",Thread_Name,":",e)
-    ICL.close()
+##    ICL.close()
     print("Outgoing connection handler has shutdown")

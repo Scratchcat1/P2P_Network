@@ -87,13 +87,16 @@ class Main_Handler(autorepr.Base):
         self._Max_Connections = Max_Connections
         self._miner = miner
         self._wallet = wallet
+        self._wallet.load_wallet()
 ##        self._UMC_SI = Networking_System.Socket_Interface(TPort = 9000)
         self._SI = Networking_System.Socket_Interface(Max_Connections,TPort = self._Node_Info.Get_Address()[1])
         self._Network_Nodes = {}  #Address :Network_Node
-        self._UMCs = {}  #UMC_Node lists list
-        self._Time = Time_Keeper()
+        self._UMCs = {}
+        # Network nodes is a dictionary mapping the address of a node in the form ("IP",port) as a key to the Socket_Interface object
+        # UMCs is a dictionary which defines if a node is priviliged to use extended commands such as accessing keys. This is in the form address ("IP",port) : Integer value
+        # Integer value where 0 - not authenticated and 1 - default higher access level
         
-
+        self._Time = Time_Keeper()
         self._Mempool = Mempool_System.Mempool()  #Stores unconfirmed transactions
         self._Chain = Chain_System.Chain(self._Mempool)
         if self._miner:
@@ -144,6 +147,9 @@ class Main_Handler(autorepr.Base):
             "Get_Wallet_Addresses":self.on_UMC_get_wallet_addresses,
             "New_Wallet_Address":self.on_UMC_new_wallet_address,
             "Sign_Message":self.on_UMC_sign_message,
+            "Get_Wallet_Keys":self.on_UMC_Get_Wallet_Keys,
+            "Dump_Wallet":self.on_UMC_Dump_Wallet
+            
                 }
         self._logger.info("Main_Handler started.")
 
@@ -158,7 +164,7 @@ class Main_Handler(autorepr.Base):
                 self.check_sync_blocks()
                 self.check_miner()
             except Exception as e:
-                self._logger.error("Error in main loop", exc_info = True)
+                self._logger.critical("Error in main loop", exc_info = True)
             time.sleep(1/60)
 
         #Shutdown procedures
@@ -360,6 +366,7 @@ class Main_Handler(autorepr.Base):
                     self._SI.Kill_Connection(Node.Get_Address())
 
 
+
     def run_rebroadcast(self):
         if self._rebroadcaster.is_go():
             self._logger.debug("Rebroadcasting data to a random set of nodes. Size of rebroadcast queue is %s" % (self._rebroadcaster.get_size(),))
@@ -380,13 +387,7 @@ class Main_Handler(autorepr.Base):
                 if target_type == "Block":
                     self._SI.Get_Blocks_Full(address,values)
                 elif target_type == "Transaction":
-                    self._SI.Get_Transactions(address,values)       #ASDFHEFHWUEHFWUEFHWHEF
-                #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
-                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
-                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
-                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
-                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
-                    #ASDFHEFHWUEHFWUEFHWHEF#ASDFHEFHWUEHFWUEFHWHEF
+                    self._SI.Get_Transactions(address,values)       
                     
 
     
@@ -465,7 +466,7 @@ class Main_Handler(autorepr.Base):
         self._SI.Connected_Addresses(Message["Address"],list(self._Network_Nodes))
 
     def on_UMC_get_UTXOs(self,Message):
-        UTXOs = self._DB.Find_Address_UTXOs(Message["Payload"])
+        UTXOs = self._db_con.Find_Address_UTXOs(Message["Payload"])
         self._SI.UTXOs(Message["Address"],UTXOs)
 
 
@@ -475,25 +476,44 @@ class Main_Handler(autorepr.Base):
         alert_details = Message["Payload"]
         success,signature = Alert_System.Sign_Alert(self._db_con, alert_details["Username"], alert_details["Message"], alert_details["TimeStamp"], alert_details["Level"])
         if success:
-            self._SI.Signed_Alert(Message["Address"],signature)
+            self._SI.Signed_Message(Message["Address"],signature)
         else:
             #Sig contains error message if failed
             self._SI.Error(Message["Address"],"Sign_Alert",error_info = signature)
 
     def on_UMC_get_wallet_addresses(self,Message):
-        self._SI.Wallet_Addresses(Message["Address"],self._wallet.Get_Addresses())
+        self._SI.Wallet_Addresses(Message["Address"],self._wallet.get_addresses())
 
     def on_UMC_new_wallet_address(self,Message):
         #Generate new address and save wallet
-        self._SI.Wallet_Addresses(Message["Address"],[self._wallet.Generate_New_Address()])
-        self._wallet.Save_Wallet()
+        self._SI.Wallet_Addresses(Message["Address"],[self._wallet.generate_new_address()])
+        self._wallet.save_wallet()
         
     def on_UMC_sign_message(self,Message):
-        if self._Wallet.has_address(Message["Payload"]["Wallet_Address"]):
-            signature = self._Wallet.sign(Message["Payload"]["Wallet_Address"],Message["Payload"]["Sign_Message"])
+        print(self._wallet.has_address(Message["Payload"]["Wallet_Address"]))
+        if self._wallet.has_address(Message["Payload"]["Wallet_Address"]):
+            signature = self._wallet.sign(Message["Payload"]["Wallet_Address"],Message["Payload"]["Sign_Message"])
             self._SI.Signed_Message(Message["Address"],signature)
         else:
             self._SI.Error(Message["Address"],"Sign_Message",error_info = "Address not in wallet. Cannot sign")
+
+##############
+
+    def on_UMC_Get_Wallet_Keys(self,Message):
+        response = {}
+        for address,flags in Message["Payload"].items():
+            if self._wallet.has_address(address):
+                response[address] = {"Public":"","Private":""}
+                if flags["Public"]:
+                    response[address]["Public"] = self._wallet.get_public_key(address)
+                if flags["Private"]:
+                    response[address]["Private"] = self._wallet.get_private_key(address)
+
+        self._SI.Wallet_Keys(Message["Address"],response)
+
+    def on_UMC_Dump_Wallet(self,Message):
+        self._SI.Wallet_Dump_Data(Message["Address"],self._wallet.export_json())
+            
     #####################################################################
         
         

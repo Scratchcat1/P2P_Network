@@ -12,11 +12,17 @@ class Wallet(autorepr.Base):
             self._wallet_file = wallet_file 
         with open(self._wallet_file) as file:
             self._wallet = json.load(file)
-        self._logger.info("Loaded wallet with ",len(self._wallet),"Addresses")
+        self._logger.info("Loaded wallet with %s Addresses" % (len(self._wallet),))
 
     def save_wallet(self):
         with open(self._wallet_file,"w") as file:
             json.dump(self._wallet,file)
+
+    def export_json(self):
+        return json.dumps(self._wallet)
+
+    def import_json(self,wallet_json):
+        self._wallet = json.loads(wallet_json)
 
 
     def generate_new_address(self):
@@ -40,14 +46,17 @@ class Wallet(autorepr.Base):
 
     def get_public_key(self,address):
         return self._wallet[address]["Public_Key"]
+    def get_private_key(self,address):
+        return self._wallet[address]["Private_Key"]
 
     def get_addresses(self):
-        return self._wallet.keys()
+        return list(self._wallet.keys())
 
     def has_address(self,address):
         return address in self._wallet
 
     def to_address(self,value):
+        #Takes base64 string and converts to address
         if type(value) != bytes:
             value = value.encode()
         return hashlib.sha256(value).hexdigest()

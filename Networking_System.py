@@ -1,4 +1,5 @@
 import socket,Threading_System,queue,Connection_System,time,recvall, threading
+import autorepr
 #Address is a tuple of ("IP",Port)
 #Each "connection" has two socket pairs, Send and Recv, Send is the one the client formed, Recv is the one the client accepted.
 
@@ -8,17 +9,18 @@ def Create_Socket_Controller(Thread_Name,Command_Queue,Output_Queue,Max_Connecti
     SC = Socket_Controller(Thread_Name,Command_Queue,Output_Queue,Max_Connections,TPort)
     SC.main()
 
-class Socket_Controller(Threading_System.Thread_Controller):
+class Socket_Controller(Threading_System.Thread_Controller, autorepr.Base):
     _Name = ""
     def __init__(self,Thread_Name,Command_Queue,Output_Queue,Max_Connections=15,TPort = 8000):
+        self.logger_setup(__name__)
         self._Thread_Name = "TC"+Thread_Name+">"
         self._Command_Queue = Command_Queue
         self._Output_Queue = Output_Queue
         self._Max_Connections = Max_Connections
 
-        self._Threads = {}
-        self._Return_Queues = {"I":queue.Queue(), "O":queue.Queue()}
-        self._Addresses = set()
+        self._Threads = {}                          #Stores handles to thread queues
+        self._Return_Queues = {"I":queue.Queue(), "O":queue.Queue()}    #Stores the Incoming and outgoing connection handlers
+        self._Addresses = {}                        #Stores the addresses and associated connections
 
     
         self.Create_Thread("Incoming_Con",TargetCommand = Connection_System.Incoming_Connection_Handler,TargetArgs = (self._Return_Queues["I"],TPort))
@@ -37,7 +39,7 @@ class Socket_Controller(Threading_System.Thread_Controller):
                 self.Process_IO_Con_Queues()
                 self.Process_Socket_Queues()
             except Exception as e:
-                print(self._Thread_Name," Error in Socket controller",e)
+                self._logger.error("%s Error in Socket controller" %(self._Thread_Name,),exc_info = True)
             time.sleep(0.1)
             
             
@@ -55,7 +57,6 @@ class Socket_Controller(Threading_System.Thread_Controller):
                     self.Create_Connection(*Arguments)
                 elif Command == "GetAddresses":
                     self.Get_Addresses()
-                    print("HI")
                 elif Command == "Reset":
                     self.Reset(*Arguments)
                 elif Command == "Exit":
@@ -73,7 +74,7 @@ class Socket_Controller(Threading_System.Thread_Controller):
                 addr,conn = data
                 if addr in self._Addresses:
                     self.Kill_Connection(addr)
-                self._Addresses.add(addr)
+                self._Addresses[addr] = conn
                 O_Return_Queue,I_Return_Queue = self.Add_Return_Queue(addr,"S"),self.Add_Return_Queue(addr,"R")
                 self.Create_Thread(addr+("S",),TargetCommand = Send_Thread,TargetArgs = (addr,conn,O_Return_Queue))
                 self.Create_Thread(addr+("R",),TargetCommand = Recv_Thread,TargetArgs = (addr,conn,I_Return_Queue))
@@ -98,14 +99,15 @@ class Socket_Controller(Threading_System.Thread_Controller):
     def Get_Addresses(self):
         self._Output_Queue.put({"Command":"SC_Addresses",
                                 "Address":"SC",
-                                "Payload":{"Addresses":self._Addresses}})
+                                "Payload":{"Addresses":list(self._Addresses.keys())}})
             
 
     def Kill_Connection(self,Address):
         if Address+("S",) in self._Threads:
             self.Close_Thread(Address+("S",)) #Closes the Send Connection
             self.Close_Thread(Address+("R",)) #Closes the Recv connection
-            self._Addresses.remove(Address)
+            self._Addresses[Address].close()
+            self._Addresses.pop(Address)
 
     def Create_Connection(self,Address):  #Creates a connection to the given address
         Outgoing_Con_Queue = self._Threads["Outgoing_Con"].Get_Queue()
@@ -404,10 +406,10 @@ class UMC_Interface_Extension:
                               "Level":Level}}
         self.Send(Address,Message)
 
-    def Signed_Alert(self,Address,Signature):
-        Message = {"Command":"Sign_Alert",
-                   "Payload":{"Signature":Signature}}
-        self.Send(Address,Message)
+##    def Signed_Alert(self,Address,Signature):
+##        Message = {"Command":"Sign_Alert",
+##                   "Payload":{"Signature":Signature}}
+##        self.Send(Address,Message)
 
 ##################
 
@@ -437,24 +439,38 @@ class UMC_Interface_Extension:
                    "Payload":{"Signature":Signature}}
         self.Send(Address,Message)
 
-    def Get_Wallet_Address_Public_Key(self,Address,Wallet_Address):
-        Message = {"Command":"Get_Wallet_Address_Public_Key",
-                   "Payload":{"Wallet_Address":Wallet_Address}}
+##    def Get_Wallet_Address_Public_Key(self,Address,Wallet_Address):
+##        Message = {"Command":"Get_Wallet_Address_Public_Key",
+##                   "Payload":{"Wallet_Address":Wallet_Address}}
+##        self.Send(Address,Message)
+##
+##    def Wallet_Address_Public_Key(self,Address,Public_Key):
+##        Message = {"Command":"Wallet_Address_Public_Key",
+##                   "Payload":{"Public_Key":Public_Key}}
+##        self.Send(Address,Message)
+##
+##    def Get_Wallet_Address_Private_Key(self,Address,Wallet_Address):
+##        Message = {"Command":"Get_Wallet_Address_Private_Key",
+##                   "Payload":{"Wallet_Address":Wallet_Address}}
+##        self.Send(Address,Message)
+##
+##    def Wallet_Address_Private_Key(self,Address,Private_Key):
+##        Message = {"Command":"Wallet_Address_Private_Key",
+##                   "Payload":{"Private_Key":Private_Key}}
+##        self.Send(Address,Message)
+
+    def Get_Wallet_Keys(self,Address,wallet_addresses):
+        #Wallet addresses should be in the form
+        #{"addressA":{"Private":True, "Public":True}, "Address":{"Private":False, "Public":True}}
+        Message = {"Command":"Get_Wallet_Keys",
+                   "Payload":wallet_addresses}
         self.Send(Address,Message)
 
-    def Wallet_Address_Public_Key(self,Address,Public_Key):
-        Message = {"Command":"Wallet_Address_Public_Key",
-                   "Payload":{"Public_Key":Public_Key}}
-        self.Send(Address,Message)
-
-    def Get_Wallet_Address_Private_Key(self,Address,Wallet_Address):
-        Message = {"Command":"Get_Wallet_Address_Private_Key",
-                   "Payload":{"Wallet_Address":Wallet_Address}}
-        self.Send(Address,Message)
-
-    def Wallet_Address_Private_Key(self,Address,Private_Key):
-        Message = {"Command":"Wallet_Address_Private_Key",
-                   "Payload":{"Private_Key":Private_Key}}
+    def Wallet_Keys(self,Address,keys):
+        #Keys should be in the form
+        #{"Address":{"Private":"", "Public":"abcde12345"}...}
+        Message = {"Command":"Wallet_Keys",
+                   "Payload":keys}
         self.Send(Address,Message)
 
     def Dump_Wallet(self,Address):
@@ -467,12 +483,13 @@ class UMC_Interface_Extension:
                    "Payload":{"Wallet_Dump":Wallet_Dump}}
         self.Send(Address,Message)
 
-    def Get_Wallet_UTXOs(self,Address,Wallet_Address_List = []):        #Response is a UTXO message
-        Message = {"Command":"Get_Wallet_UTXOs",
-                   "Payload":{"Wallet_Address_List":Wallet_Address_List}}
-        self.Send(Address,Message)
+##    def Get_Wallet_UTXOs(self,Address,Wallet_Address_List = []):        #Response is a UTXO message
+##        Message = {"Command":"Get_Wallet_UTXOs",
+##                   "Payload":{"Wallet_Address_List":Wallet_Address_List}}
+##        self.Send(Address,Message)
 
-    def Get_Wallet_Transactions(self,Address,Wallet_Address_List = []): #Response is a Transaction message
+    def Get_Wallet_Transactions(self,Address,Wallet_Address_List = []):
+        #Response is a Transaction message
         Message = {"Command":"Get_Wallet_Transactions",
                    "Payload":{"Wallet_Address_List":Wallet_Address_List}}
         self.Send(Address,Message)
@@ -494,6 +511,8 @@ class Socket_Interface(Basic_Socket_Interface,Socket_Interface_Extender,UMC_Inte
 def Make_Inv_Item(Type,Payload):
     return {"Type":Type,
             "Payload":Payload}
+
+
         
 
 
